@@ -76,5 +76,6 @@ int main() {
 
     tnn_save("mlp.tnn");
     tnn_terminate();
+    return 0;
 }
 ```
