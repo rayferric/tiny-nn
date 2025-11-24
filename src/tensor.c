@@ -34,32 +34,32 @@ void tnn_free(tnn_tensor_t *t, tnn_tensor_type_t types) {
 	free(nodes);
 }
 
-void tnn_print(tnn_tensor_t *vec) {
-	assert(vec->num_dims <= 2 && "tnn_print: only 0D/1D/2D supported");
+void tnn_print(tnn_tensor_t *t) {
+	assert(t->num_dims <= 2 && "tnn_print: only 0D/1D/2D supported");
 
-	if (vec->num_dims == 0) {
-		printf("%.4f", vec->data[0]);
-	} else if (vec->num_dims == 1) {
+	if (t->num_dims == 0) {
+		printf("%.4f", t->data[0]);
+	} else if (t->num_dims == 1) {
 		printf("[");
-		for (size_t i = 0; i < vec->dims[0]; i++) {
-			printf("%.4f", vec->data[i]);
-			if (i < vec->dims[0] - 1) {
+		for (size_t i = 0; i < t->dims[0]; i++) {
+			printf("%.4f", t->data[i]);
+			if (i < t->dims[0] - 1) {
 				printf(", ");
 			}
 		}
 		printf("]");
-	} else if (vec->num_dims == 2) {
+	} else if (t->num_dims == 2) {
 		printf("[\n");
-		for (size_t i = 0; i < vec->dims[0]; i++) {
+		for (size_t i = 0; i < t->dims[0]; i++) {
 			printf("  [");
-			for (size_t j = 0; j < vec->dims[1]; j++) {
-				printf("%.4f", vec->data[i * vec->dims[1] + j]);
-				if (j < vec->dims[1] - 1) {
+			for (size_t j = 0; j < t->dims[1]; j++) {
+				printf("%.4f", t->data[i * t->dims[1] + j]);
+				if (j < t->dims[1] - 1) {
 					printf(", ");
 				}
 			}
 			printf("]");
-			if (i < vec->dims[0] - 1) {
+			if (i < t->dims[0] - 1) {
 				printf(",");
 			}
 			printf("\n");
@@ -68,23 +68,23 @@ void tnn_print(tnn_tensor_t *vec) {
 	}
 }
 
-float tnn_item(tnn_tensor_t *vec) {
-	return vec->data[0];
+float tnn_item(tnn_tensor_t *t) {
+	return t->data[0];
 }
 
-size_t tnn_dim(tnn_tensor_t *vec, int32_t i_dim) {
+size_t tnn_dim(tnn_tensor_t *t, int32_t i_dim) {
 	// wrap negative indices
 	if (i_dim < 0) {
-		i_dim += vec->num_dims;
+		i_dim += t->num_dims;
 	}
-	assert(i_dim < vec->num_dims);
-	return vec->dims[i_dim];
+	assert(i_dim < t->num_dims);
+	return t->dims[i_dim];
 }
 
-size_t tnn_size(tnn_tensor_t *vec) {
+size_t tnn_size(tnn_tensor_t *t) {
 	size_t total_size = 1;
-	for (uint8_t i = 0; i < vec->num_dims; i++) {
-		total_size *= vec->dims[i];
+	for (uint8_t i = 0; i < t->num_dims; i++) {
+		total_size *= t->dims[i];
 	}
 	return total_size;
 }
@@ -92,19 +92,19 @@ size_t tnn_size(tnn_tensor_t *vec) {
 #include "./impl/alloc_tensor.h"
 
 tnn_tensor_t *tnn_data(const size_t *dims, size_t num_dims, const float *data) {
-	tnn_tensor_t *vec = _tnn_alloc_tensor(dims, num_dims, TNN_INPUT);
+	tnn_tensor_t *t = _tnn_alloc_tensor(dims, num_dims, TNN_INPUT);
 
-	size_t total_size = tnn_size(vec);
-	memcpy(vec->data, data, total_size * sizeof(float));
+	size_t total_size = tnn_size(t);
+	memcpy(t->data, data, total_size * sizeof(float));
 
-	return vec;
+	return t;
 }
 
 tnn_tensor_t *tnn_zeros(const size_t *dims, size_t num_dims) {
-	tnn_tensor_t *vec = _tnn_alloc_tensor(dims, num_dims, TNN_INPUT);
+	tnn_tensor_t *t = _tnn_alloc_tensor(dims, num_dims, TNN_INPUT);
 
-	size_t total_size = tnn_size(vec);
-	memset(vec->data, 0, total_size * sizeof(float));
+	size_t total_size = tnn_size(t);
+	memset(t->data, 0, total_size * sizeof(float));
 
-	return vec;
+	return t;
 }
