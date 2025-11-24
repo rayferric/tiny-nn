@@ -67,6 +67,8 @@ int main() {
 	tnn_drop("adamw");
 	tnn_save("mnist_mlp.tnn");
 
+	mnist_destroy(&mnist);
+
 	tnn_terminate();
 
 	return 0;

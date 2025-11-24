@@ -71,7 +71,6 @@ void tnn_adamw(tnn_adamw_cfg_t cfg) {
 					memset(m2->data, 0, param_size * sizeof(float));
 				}
 				if (timestep_created) {
-					timestep->data = malloc(sizeof(float));
 					timestep->data[0] = 0.0f;
 				}
 			}
