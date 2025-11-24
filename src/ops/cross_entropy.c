@@ -4,6 +4,32 @@
 #include <math.h>
 #include <stdbool.h>
 
+static void calc_softmax_parts(
+    float *out_max_logit,
+    float *out_sum_exp,
+    tnn_tensor_t *pred,
+    size_t i_batch,
+    size_t num_classes
+) {
+	// compute values for softmax
+	*out_max_logit = pred->data[i_batch * num_classes];
+	for (size_t i_logit = 1; i_logit < num_classes; i_logit++) {
+		float logit = pred->data[i_batch * num_classes + i_logit];
+		if (logit > *out_max_logit) {
+			*out_max_logit = logit;
+		}
+	}
+	*out_sum_exp = 0.0f;
+	for (size_t i_logit = 0; i_logit < num_classes; i_logit++) {
+		*out_sum_exp +=
+		    expf(pred->data[i_batch * num_classes + i_logit] - *out_max_logit);
+	}
+}
+
+static float softmax_from_parts(float logit, float max_logit, float sum_exp) {
+	return expf(logit - max_logit) / sum_exp;
+}
+
 static void cross_entropy_backward(tnn_tensor_t *self) {
 	tnn_tensor_t *target = self->parents[0];
 	tnn_tensor_t *pred = self->parents[1];
@@ -17,8 +43,13 @@ static void cross_entropy_backward(tnn_tensor_t *self) {
 	// pred->grad = (softmax(pred) - target) / batch_size
 	if (pred->type == TNN_OUTPUT) {
 		for (size_t i = 0; i < batch_size; i++) {
+			float max_logit, sum_exp;
+			calc_softmax_parts(&max_logit, &sum_exp, pred, i, num_classes);
+
 			for (size_t j = 0; j < num_classes; j++) {
-				float softmax_val = pred->data[i * num_classes + j];
+				float softmax_val = softmax_from_parts(
+				    pred->data[i * num_classes + j], max_logit, sum_exp
+				);
 				float target_val = target->data[i * num_classes + j];
 				pred->grad[i * num_classes + j] +=
 				    (softmax_val - target_val) / (float)batch_size;
@@ -45,32 +76,19 @@ tnn_tensor_t *tnn_cross_entropy(tnn_tensor_t *pred, tnn_tensor_t *target) {
 	float total_loss = 0.0f;
 
 	for (size_t i = 0; i < batch_size; i++) {
-		// compute softmax for this sample
-		float max_logit = pred->data[i * num_classes];
-		for (size_t j = 1; j < num_classes; j++) {
-			float logit = pred->data[i * num_classes + j];
-			if (logit > max_logit) {
-				max_logit = logit;
-			}
-		}
-
-		float sum_exp = 0.0f;
-		for (size_t j = 0; j < num_classes; j++) {
-			sum_exp += expf(pred->data[i * num_classes + j] - max_logit);
-		}
+		float max_logit, sum_exp;
+		calc_softmax_parts(&max_logit, &sum_exp, pred, i, num_classes);
 
 		// compute cross entropy: -sum(target * log(softmax(pred)))
 		for (size_t j = 0; j < num_classes; j++) {
-			float softmax_val =
-			    expf(pred->data[i * num_classes + j] - max_logit) / sum_exp;
+			float softmax_val = softmax_from_parts(
+			    pred->data[i * num_classes + j], max_logit, sum_exp
+			);
 			float target_val = target->data[i * num_classes + j];
 
 			if (target_val > 0.0f) {
 				total_loss -= target_val * logf(softmax_val);
 			}
-
-			// store softmax in pred->data for backward
-			pred->data[i * num_classes + j] = softmax_val;
 		}
 	}
 
