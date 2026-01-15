@@ -42,14 +42,14 @@ static void mnist_destroy(mnist_t *mnist) {
 
 static void
 mnist_load(mnist_t *mnist, const char *images_path, const char *labels_path) {
-	// Load images
+	// IMAGES FILE
+
 	FILE *images_file = fopen(images_path, "rb");
 	if (!images_file) {
 		fprintf(stderr, "could not open images file: %s\n", images_path);
 		exit(1);
 	}
 
-	// Read images file header
 	uint32_t magic = read_be32(images_file);
 	if (magic != 0x00000803) {
 		fprintf(stderr, "invalid magic number in images file: 0x%08X\n", magic);
@@ -65,29 +65,27 @@ mnist_load(mnist_t *mnist, const char *images_path, const char *labels_path) {
 	mnist->num_rows = num_rows;
 	mnist->num_cols = num_cols;
 
-	// Allocate and read image data
+	// read image data
 	size_t image_size = num_rows * num_cols;
 	size_t total_pixels = num_images * image_size;
-
 	uint8_t *raw_images = malloc(total_pixels);
 	fread(raw_images, 1, total_pixels, images_file);
 	fclose(images_file);
-
-	// Convert to float and normalize to [0, 1]
+	// convert to 0..1 floats and save to mnist->images
 	mnist->images = malloc(total_pixels * sizeof(float));
 	for (size_t i = 0; i < total_pixels; i++) {
 		mnist->images[i] = raw_images[i] / 255.0f;
 	}
 	free(raw_images);
 
-	// Load labels
+	// LABELS FILE
+
 	FILE *labels_file = fopen(labels_path, "rb");
 	if (!labels_file) {
 		fprintf(stderr, "could not open labels file: %s\n", labels_path);
 		exit(1);
 	}
 
-	// Read labels file header
 	magic = read_be32(labels_file);
 	if (magic != 0x00000801) {
 		fprintf(stderr, "invalid magic number in labels file: 0x%08X\n", magic);
@@ -107,25 +105,17 @@ mnist_load(mnist_t *mnist, const char *images_path, const char *labels_path) {
 		exit(1);
 	}
 
-	// Allocate and read label data
+	// read label data
 	uint8_t *raw_labels = malloc(num_labels);
 	fread(raw_labels, 1, num_labels, labels_file);
 	fclose(labels_file);
-
-	// One-hot encode labels during load
+	// one-hot encode and save to mnist->labels
 	mnist->labels = calloc(num_labels * 10, sizeof(float));
 	for (size_t i = 0; i < num_labels; i++) {
 		uint8_t label = raw_labels[i];
 		mnist->labels[i * 10 + label] = 1.0f;
 	}
 	free(raw_labels);
-
-	printf(
-	    "loaded MNIST dataset: %zu images, %zu x %zu pixels\n",
-	    mnist->num_images,
-	    mnist->num_rows,
-	    mnist->num_cols
-	);
 }
 
 #include <tnn/tnn.h>
@@ -141,9 +131,9 @@ mnist_batch_images(mnist_t *mnist, size_t start_idx, size_t batch_size) {
 
 	// Create tensor directly from the offset buffer
 	size_t offset = start_idx * image_size;
-	return tnn_data(
-	    (size_t[]){batch_size, image_size}, 2, &mnist->images[offset]
-	);
+	tnn_tensor_t *batch = tnn_alloc((size_t[]){batch_size, image_size}, 2);
+	tnn_init_from_memory(batch, &mnist->images[offset]);
+	return batch;
 }
 
 static tnn_tensor_t *
@@ -155,5 +145,7 @@ mnist_batch_labels(mnist_t *mnist, size_t start_idx, size_t batch_size) {
 
 	// Create tensor directly from the offset buffer (already one-hot encoded)
 	size_t offset = start_idx * 10;
-	return tnn_data((size_t[]){batch_size, 10}, 2, &mnist->labels[offset]);
+	tnn_tensor_t *batch = tnn_alloc((size_t[]){batch_size, 10}, 2);
+	tnn_init_from_memory(batch, &mnist->labels[offset]);
+	return batch;
 }

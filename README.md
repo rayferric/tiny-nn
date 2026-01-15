@@ -54,7 +54,7 @@ int main() {
 
     for (int i = 0; i < 100; i++) {
         tnn_tensor_t *x, *y; // TNN_INPUT
-        // mnist_load_batch(&x, &y, batch_size, i);
+        // ... load x, y from dataset ...
 
         tnn_tensor_t *y_pred = mlp(x, 10, 128, 2); // TNN_OUTPUT
         tnn_tensor_t *loss = tnn_cross_entropy(y_pred, y); // TNN_OUTPUT

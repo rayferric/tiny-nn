@@ -47,7 +47,7 @@ static void proj_backward(tnn_tensor_t *self) {
 	size_t dim_out = weight->dims[1];
 
 	// input->grad = self->grad @ weight^T
-	if (input->type == TNN_OUTPUT) {
+	if (input->requires_grad) {
 		matmul(
 		    self->grad,
 		    weight->data,
@@ -75,9 +75,6 @@ static void proj_backward(tnn_tensor_t *self) {
 	);
 }
 
-#include "./impl/alloc_tensor.h"
-#include "./impl/param_table.h"
-
 tnn_tensor_t *tnn_proj(tnn_tensor_t *input, size_t dim_out) {
 	assert(input->num_dims >= 2);
 
@@ -90,21 +87,16 @@ tnn_tensor_t *tnn_proj(tnn_tensor_t *input, size_t dim_out) {
 	// get weights
 	size_t weight_dims[2] = {dim_in, dim_out};
 	bool weight_created = false;
-	tnn_tensor_t *weight = _tnn_get_or_create_param(
-	    "proj", weight_dims, 2, TNN_PARAMETER, &weight_created
-	);
+	tnn_tensor_t *weight =
+	    tnn_alloc_or_get_state(weight_dims, 2, "proj", &weight_created);
+	weight->requires_grad = true;
 	if (weight_created) {
-		// xavier uniform init
-		float max_val = sqrtf(6.0f / (dim_in + dim_out));
-		for (size_t i = 0; i < dim_in * dim_out; i++) {
-			weight->data[i] =
-			    ((float)rand() / (float)RAND_MAX) * 2.0f * max_val - max_val;
-		}
+		tnn_init_xavier(weight);
 	}
 
 	// alloc output
 	size_t output_dims[2] = {dim_batch, dim_out};
-	tnn_tensor_t *output = _tnn_alloc_tensor(output_dims, 2, TNN_OUTPUT);
+	tnn_tensor_t *output = tnn_alloc(output_dims, 2);
 
 	// output = input @ weight
 	matmul(
@@ -119,9 +111,12 @@ tnn_tensor_t *tnn_proj(tnn_tensor_t *input, size_t dim_out) {
 	    false  // no accum
 	);
 
+	output->requires_grad = true;
 	output->parents[0] = input;
 	output->parents[1] = weight;
 	output->num_parents = 2;
+	input->num_children++;
+	weight->num_children++;
 	output->backward = proj_backward;
 
 	return output;

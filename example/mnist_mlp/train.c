@@ -16,20 +16,18 @@ int main() {
 	mnist_create(&mnist);
 	mnist_load(
 	    &mnist,
-	    "../data/train-images.idx3-ubyte",
-	    "../data/train-labels.idx1-ubyte"
+	    "/home/rayferric/Source/tiny-nn/data/train-images.idx3-ubyte",
+	    "/home/rayferric/Source/tiny-nn/data/train-labels.idx1-ubyte"
 	);
 
 	mlp_cfg_t mlp_cfg =
 	    MLP_CFG(.dim_out = 10, .dim_hidden = 128, .num_hidden = 2);
-	tnn_adamw_cfg_t adamw_cfg = TNN_ADAMW_CFG();
+	tnn_adamw_cfg_t adamw_cfg = TNN_ADAMW_CFG(.lr = 0.001f);
 
 	const size_t num_epochs = 1;
-	const size_t num_steps = 60;
+	const size_t num_steps = 50;
 	const size_t batch_size = 100;
 	for (int i_epoch = 0; i_epoch < num_epochs; i_epoch++) {
-		printf("\nepoch %d/%zu:", i_epoch + 1, num_epochs);
-
 		for (int i = 0; i < num_steps; i++) {
 			tnn_tensor_t *x =
 			    mnist_batch_images(&mnist, i * batch_size, batch_size);
@@ -43,28 +41,25 @@ int main() {
 			tnn_backward(loss);
 			tnn_adamw(adamw_cfg);
 
-			printf("\nloss: ");
+			printf("\nStep %d/%zu: ", i + 1, num_steps);
+			printf("loss=");
 			tnn_print(loss);
-
-			// calc accuracy
 			float acc = accuracy(y_pred, y);
-			printf(" accuracy: %.2f%%", acc * 100.0f);
+			printf(", accuracy=%.2f%%", acc * 100.0f);
+			fflush(stdout);
 
-			tnn_free(loss, TNN_INPUT | TNN_OUTPUT);
+			tnn_free(loss);
 		}
 	}
 
-	// debug: list parameters
-	size_t num_keys = tnn_params(NULL);
-	char **keys = malloc(num_keys * sizeof(char *));
-	tnn_params(keys);
-	printf("\n\nParameter table:\n");
+	char *keys[1024];
+	size_t num_keys = tnn_list_state_keys(keys);
+	printf("\n\nState table:\n");
 	for (size_t i = 0; i < num_keys; i++) {
 		printf("- %s\n", keys[i]);
 	}
-	free(keys);
 
-	tnn_drop("adamw");
+	tnn_drop_state("adamw");
 	tnn_save("mnist_mlp.tnn");
 
 	mnist_destroy(&mnist);

@@ -9,29 +9,166 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "./impl/toposort.h"
+#include "./impl/malloc.h"
 
-void tnn_free(tnn_tensor_t *t, tnn_tensor_type_t types) {
+tnn_tensor_t *tnn_alloc(const size_t *dims, size_t num_dims) {
+	tnn_tensor_t *t = tnn_safe_malloc(sizeof(tnn_tensor_t));
+
+	t->num_dims = num_dims;
+	if (num_dims > 0) {
+		t->dims = tnn_safe_malloc(num_dims * sizeof(size_t));
+		memcpy(t->dims, dims, num_dims * sizeof(size_t));
+	} else {
+		t->dims = NULL;
+	}
+
+	size_t total_size = tnn_size(t);
+	t->data = tnn_safe_malloc(total_size * sizeof(float));
+	t->grad = NULL;
+
+	t->requires_grad = false;
+	t->is_state = false;
+
+	t->num_parents = 0;
+	t->num_children = 0;
+	t->backward = NULL;
+
+	t->context = NULL;
+	t->free_context = NULL;
+
+	return t;
+}
+
+tnn_tensor_t *tnn_alloc_or_get_state(
+    const size_t *dims, size_t num_dims, const char *key, bool *allocated
+) {
+	tnn_tensor_t *t = tnn_get_state(key);
+	if (t != NULL) {
+		if (allocated) {
+			*allocated = false;
+		}
+		return t;
+	}
+
+	t = tnn_alloc(dims, num_dims);
+	t->is_state = true;
+	tnn_set_state(key, t);
+
+	if (allocated) {
+		*allocated = true;
+	}
+
+	return t;
+}
+
+void tnn_free(tnn_tensor_t *t) {
 	assert(t != NULL);
 
-	size_t num_nodes;
-	tnn_tensor_t **nodes = _tnn_toposort(t, &num_nodes);
-
-	for (size_t i = 0; i < num_nodes; i++) {
-		tnn_tensor_t *node = nodes[i];
-
-		if (!(node->type & types)) {
-			continue;
-		}
-
-		free(node->data);
-		if (node->grad) {
-			free(node->grad);
-		}
-		free(node->dims);
-		free(node);
+	// skip freeing t if still referenced
+	if (t->num_children > 0 || t->is_state) {
+		return;
 	}
-	free(nodes);
+
+	// decrement ref counts for parents and free them recursively
+	for (size_t i = 0; i < t->num_parents; i++) {
+		tnn_tensor_t *parent = t->parents[i];
+		assert(parent != NULL);
+		parent->num_children--;
+		tnn_free(parent);
+	}
+
+	// free current tensor
+	free(t->data);
+	if (t->grad) {
+		free(t->grad);
+	}
+	free(t->dims);
+	if (t->context != NULL && t->free_context != NULL) {
+		// (forward was executed without backward)
+		t->free_context(t->context);
+	}
+	free(t);
+}
+
+tnn_tensor_t *tnn_detach(tnn_tensor_t *t) {
+	tnn_tensor_t *detached = tnn_safe_malloc(sizeof(tnn_tensor_t));
+
+	detached->num_dims = t->num_dims;
+	if (t->num_dims > 0) {
+		detached->dims = tnn_safe_malloc(t->num_dims * sizeof(size_t));
+		memcpy(detached->dims, t->dims, t->num_dims * sizeof(size_t));
+	} else {
+		detached->dims = NULL;
+	}
+
+	size_t total_size = tnn_size(t);
+	detached->data = tnn_safe_malloc(total_size * sizeof(float));
+	memcpy(detached->data, t->data, total_size * sizeof(float));
+
+	detached->grad = NULL;
+	detached->requires_grad = false;
+	detached->is_state = false;
+
+	detached->num_parents = 0;
+	detached->num_children = 0;
+	detached->backward = NULL;
+	detached->context = NULL;
+	detached->free_context = NULL;
+
+	return detached;
+}
+
+void tnn_init_from_memory(tnn_tensor_t *t, const float *data) {
+	size_t total_size = tnn_size(t);
+	memcpy(t->data, data, total_size * sizeof(float));
+}
+
+void tnn_init_zeros(tnn_tensor_t *t) {
+	size_t total_size = tnn_size(t);
+	memset(t->data, 0, total_size * sizeof(float));
+}
+
+void tnn_init_xavier(tnn_tensor_t *t) {
+	assert(t->num_dims >= 2);
+
+	size_t fan_in = t->dims[t->num_dims - 2];
+	size_t fan_out = t->dims[t->num_dims - 1];
+
+	float limit = sqrtf(6.0f / (fan_in + fan_out));
+
+	size_t total_size = tnn_size(t);
+	for (size_t i = 0; i < total_size; i++) {
+		float u = (float)rand() / (float)RAND_MAX;
+		t->data[i] = u * 2.0f * limit - limit;
+	}
+}
+
+void tnn_init_randn(tnn_tensor_t *t) {
+	size_t total_size = tnn_size(t);
+	for (size_t i = 0; i < total_size; i++) {
+		// box-muller transform for normal distribution
+		float u1 = (float)rand() / (float)RAND_MAX;
+		float u2 = (float)rand() / (float)RAND_MAX;
+		float z = sqrtf(-2.0f * logf(u1)) * cosf(2.0f * M_PI * u2);
+		t->data[i] = z;
+	}
+}
+
+size_t tnn_dim(tnn_tensor_t *t, int32_t i_dim) {
+	// wrap negative indices
+	if (i_dim < 0) {
+		i_dim += t->num_dims;
+	}
+	assert(i_dim < t->num_dims);
+	return t->dims[i_dim];
+}
+
+size_t tnn_size(tnn_tensor_t *t) {
+	size_t total_size = 1;
+	for (size_t i = 0; i < t->num_dims; i++) {
+		total_size *= t->dims[i];
+	}
+	return total_size;
 }
 
 void tnn_print(tnn_tensor_t *t) {
@@ -70,41 +207,4 @@ void tnn_print(tnn_tensor_t *t) {
 
 float tnn_item(tnn_tensor_t *t) {
 	return t->data[0];
-}
-
-size_t tnn_dim(tnn_tensor_t *t, int32_t i_dim) {
-	// wrap negative indices
-	if (i_dim < 0) {
-		i_dim += t->num_dims;
-	}
-	assert(i_dim < t->num_dims);
-	return t->dims[i_dim];
-}
-
-size_t tnn_size(tnn_tensor_t *t) {
-	size_t total_size = 1;
-	for (uint8_t i = 0; i < t->num_dims; i++) {
-		total_size *= t->dims[i];
-	}
-	return total_size;
-}
-
-#include "./impl/alloc_tensor.h"
-
-tnn_tensor_t *tnn_data(const size_t *dims, size_t num_dims, const float *data) {
-	tnn_tensor_t *t = _tnn_alloc_tensor(dims, num_dims, TNN_INPUT);
-
-	size_t total_size = tnn_size(t);
-	memcpy(t->data, data, total_size * sizeof(float));
-
-	return t;
-}
-
-tnn_tensor_t *tnn_zeros(const size_t *dims, size_t num_dims) {
-	tnn_tensor_t *t = _tnn_alloc_tensor(dims, num_dims, TNN_INPUT);
-
-	size_t total_size = tnn_size(t);
-	memset(t->data, 0, total_size * sizeof(float));
-
-	return t;
 }

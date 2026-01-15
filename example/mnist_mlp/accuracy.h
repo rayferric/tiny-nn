@@ -2,6 +2,8 @@
 
 #include <tnn/tnn.h>
 
+// shapes = (N, C)
+// pred contains logits, target is one-hot encoded
 float accuracy(tnn_tensor_t *pred, tnn_tensor_t *target) {
 	size_t batch_size = pred->dims[0];
 	size_t num_classes = pred->dims[1];

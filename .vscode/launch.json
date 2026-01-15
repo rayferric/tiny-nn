@@ -3,9 +3,8 @@
     {
       "type": "lldb-dap",
       "request": "launch",
-      "name": "Debug with LLDB",
-      "program": "${workspaceFolder}/build/tnn_example__mnist_mlp__train",
-      "console": "integratedTerminal"
+      "name": "Debug",
+      "program": "${workspaceFolder}/build/tnn_example__mnist_mlp__train"
     }
   ]
 }

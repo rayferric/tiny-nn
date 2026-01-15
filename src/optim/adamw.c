@@ -7,19 +7,17 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "./impl/param_table.h"
-#include "./impl/scope_str_utils.h"
+#include "./impl/key_str_utils.h"
 
 void tnn_adamw(tnn_adamw_cfg_t cfg) {
-	char full_scope[TNN_PARAM_KEY_MAX_LEN];
-	_tnn_cat_keys(full_scope, tnn_globals.active_scope, cfg.scope);
+	char full_scope[TNN_STATE_KEY_MAX_LEN];
+	_tnn_cat_keys(full_scope, tnn_state.active_scope, cfg.scope);
 
-	for (size_t i = 0; i < TNN_PARAM_TABLE_SIZE; i++) {
-		tnn_param_entry_t *entry = tnn_globals.param_table[i];
+	for (size_t i = 0; i < TNN_STATE_DICT_SIZE; i++) {
+		tnn_state_entry_t *entry = tnn_state.state_dict[i];
 		while (entry != NULL) {
 			if (!_tnn_key_in_scope(entry->key, full_scope) ||
-			    entry->param->type != TNN_PARAMETER ||
-			    entry->param->grad == NULL) {
+			    !entry->param->requires_grad || entry->param->grad == NULL) {
 				entry = entry->next;
 				continue;
 			}
@@ -33,9 +31,9 @@ void tnn_adamw(tnn_adamw_cfg_t cfg) {
 			// get or create m1 and m2 for this param
 			tnn_tensor_t *m1, *m2, *timestep;
 			TNN_SCOPE("adamw") {
-				char m1_rel_key[TNN_PARAM_KEY_MAX_LEN];
-				char m2_rel_key[TNN_PARAM_KEY_MAX_LEN];
-				char timestep_rel_key[TNN_PARAM_KEY_MAX_LEN];
+				char m1_rel_key[TNN_STATE_KEY_MAX_LEN];
+				char m2_rel_key[TNN_STATE_KEY_MAX_LEN];
+				char timestep_rel_key[TNN_STATE_KEY_MAX_LEN];
 				_tnn_cat_keys(m1_rel_key, param_rel_key, "m1");
 				_tnn_cat_keys(m2_rel_key, param_rel_key, "m2");
 				_tnn_cat_keys(timestep_rel_key, param_rel_key, "t");
@@ -43,32 +41,23 @@ void tnn_adamw(tnn_adamw_cfg_t cfg) {
 				bool m1_created = false;
 				bool m2_created = false;
 				bool timestep_created = false;
-				m1 = _tnn_get_or_create_param(
-				    m1_rel_key,
-				    param->dims,
-				    param->num_dims,
-				    TNN_BUFFER,
-				    &m1_created
+				m1 = tnn_alloc_or_get_state(
+				    param->dims, param->num_dims, m1_rel_key, &m1_created
 				);
-				m2 = _tnn_get_or_create_param(
-				    m2_rel_key,
-				    param->dims,
-				    param->num_dims,
-				    TNN_BUFFER,
-				    &m2_created
+				m2 = tnn_alloc_or_get_state(
+				    param->dims, param->num_dims, m2_rel_key, &m2_created
 				);
-				timestep = _tnn_get_or_create_param(
-				    timestep_rel_key, NULL, 0, TNN_BUFFER, &timestep_created
-				); // 0-dim scalar
+				size_t timestep_dims[] = {1};
+				timestep = tnn_alloc_or_get_state(
+				    timestep_dims, 1, timestep_rel_key, &timestep_created
+				);
 
 				// zero init if newly created
 				if (m1_created) {
-					size_t param_size = tnn_size(param);
-					memset(m1->data, 0, param_size * sizeof(float));
+					tnn_init_zeros(m1);
 				}
 				if (m2_created) {
-					size_t param_size = tnn_size(param);
-					memset(m2->data, 0, param_size * sizeof(float));
+					tnn_init_zeros(m2);
 				}
 				if (timestep_created) {
 					timestep->data[0] = 0.0f;

@@ -7,7 +7,7 @@
 static void relu_backward(tnn_tensor_t *self) {
 	tnn_tensor_t *input = self->parents[0];
 
-	if (input->type == TNN_OUTPUT) {
+	if (input->requires_grad) {
 		size_t total_size = tnn_size(input);
 		for (size_t i = 0; i < total_size; i++) {
 			// dself/dinput = 1 if input > 0, else 0
@@ -18,14 +18,11 @@ static void relu_backward(tnn_tensor_t *self) {
 	}
 }
 
-#include "./impl/alloc_tensor.h"
-
 tnn_tensor_t *tnn_relu(tnn_tensor_t *input) {
 	assert(input != NULL);
 
 	// alloc output with same dims as input
-	tnn_tensor_t *output =
-	    _tnn_alloc_tensor(input->dims, input->num_dims, TNN_OUTPUT);
+	tnn_tensor_t *output = tnn_alloc(input->dims, input->num_dims);
 
 	// output = max(0, input)
 	size_t total_size = tnn_size(input);
@@ -33,8 +30,10 @@ tnn_tensor_t *tnn_relu(tnn_tensor_t *input) {
 		output->data[i] = input->data[i] > 0.0f ? input->data[i] : 0.0f;
 	}
 
+	output->requires_grad = input->requires_grad;
 	output->parents[0] = input;
 	output->num_parents = 1;
+	input->num_children++;
 	output->backward = relu_backward;
 
 	return output;

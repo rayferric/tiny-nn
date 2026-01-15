@@ -6,7 +6,7 @@
 
 #include <tnn/tnn.h>
 
-#include "./globals.h"
+#include "./state.h"
 
 static bool _tnn_key_in_scope(const char *key, const char *scope) {
 	size_t scope_len = strlen(scope);
@@ -53,11 +53,11 @@ static void _tnn_cat_keys(char *out_path, const char *key1, const char *key2) {
 	bool has_key2 = (key2 != NULL && key2[0] != '\0');
 
 	if (has_key1 && has_key2) {
-		snprintf(out_path, TNN_PARAM_KEY_MAX_LEN, "%s/%s", key1, key2);
+		snprintf(out_path, TNN_STATE_KEY_MAX_LEN, "%s/%s", key1, key2);
 	} else if (has_key1) {
-		strncpy(out_path, key1, TNN_PARAM_KEY_MAX_LEN);
+		snprintf(out_path, TNN_STATE_KEY_MAX_LEN, "%s", key1);
 	} else if (has_key2) {
-		strncpy(out_path, key2, TNN_PARAM_KEY_MAX_LEN);
+		snprintf(out_path, TNN_STATE_KEY_MAX_LEN, "%s", key2);
 	} else {
 		out_path[0] = '\0';
 	}

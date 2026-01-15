@@ -41,7 +41,7 @@ static void cross_entropy_backward(tnn_tensor_t *self) {
 	size_t num_classes = pred->dims[1];
 
 	// pred->grad = (softmax(pred) - target) / batch_size
-	if (pred->type == TNN_OUTPUT) {
+	if (pred->requires_grad) {
 		for (size_t i = 0; i < batch_size; i++) {
 			float max_logit, sum_exp;
 			calc_softmax_parts(&max_logit, &sum_exp, pred, i, num_classes);
@@ -58,8 +58,6 @@ static void cross_entropy_backward(tnn_tensor_t *self) {
 	}
 }
 
-#include "./impl/alloc_tensor.h"
-
 tnn_tensor_t *tnn_cross_entropy(tnn_tensor_t *pred, tnn_tensor_t *target) {
 	assert(target->num_dims == 2 && "target must be 2D [batch, num_classes]");
 	assert(pred->num_dims == 2 && "pred must be 2D [batch, num_classes]");
@@ -71,7 +69,7 @@ tnn_tensor_t *tnn_cross_entropy(tnn_tensor_t *pred, tnn_tensor_t *target) {
 	assert(target->dims[1] == num_classes);
 
 	// allocate scalar output
-	tnn_tensor_t *output = _tnn_alloc_tensor(NULL, 0, TNN_OUTPUT);
+	tnn_tensor_t *output = tnn_alloc(NULL, 0);
 
 	float total_loss = 0.0f;
 
@@ -97,6 +95,8 @@ tnn_tensor_t *tnn_cross_entropy(tnn_tensor_t *pred, tnn_tensor_t *target) {
 	output->parents[0] = target;
 	output->parents[1] = pred;
 	output->num_parents = 2;
+	pred->num_children++;
+	target->num_children++;
 	output->backward = cross_entropy_backward;
 
 	return output;
