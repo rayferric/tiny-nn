@@ -9,20 +9,6 @@
 
 #include "../impl/malloc.h"
 
-// in case there's less indices than dims, treat leading dims as part of the
-// first indexed dim
-// example usage: output->data[access_nd(output, (size_t[]){b, i, j, c}, 4)] = sum;
-// instead of: output->data[((b * h_out + i) * w_out + j) * c_out + c] = sum;
-static inline size_t
-access_nd(tnn_tensor_t *t, size_t *indices, int num_indices) {
-	size_t offset = indices[0];
-	for (int i = 1; i < num_indices; i++) {
-		// offset = offset * t->dims[i] + indices[i];
-		offset = offset * t->dims[i + (t->num_dims - num_indices)] + indices[i];
-	}
-	return offset;
-}
-
 typedef struct {
 	size_t in_channels;
 	size_t height;
@@ -63,7 +49,7 @@ static void conv_backward(tnn_tensor_t *self) {
         for (size_t i_out = 0; i_out < h_out; i_out++) {
         for (size_t j_out = 0; j_out < w_out; j_out++) {
         for (size_t c = 0; c < c_out; c++) {
-            float grad_val = self->grad[access_nd(self, (size_t[]){b, i_out, j_out, c}, 4)];
+			float grad_val = tnn_grad_at(self, b, i_out, j_out, c);
 
             for (size_t ki = 0; ki < k; ki++) {
             for (size_t kj = 0; kj < k; kj++) {
@@ -72,8 +58,8 @@ static void conv_backward(tnn_tensor_t *self) {
 
                 if (i_in >= 0 && i_in < (int)h_in && j_in >= 0 && j_in < (int)w_in) {
                     for (size_t c_i = 0; c_i < c_in; c_i++) {
-                        float w_val = weight->data[access_nd(weight, (size_t[]){c, ki, kj, c_i}, 4)];
-                        input->grad[access_nd(input, (size_t[]){b, i_in, j_in, c_i}, 4)] += grad_val * w_val;
+						float w_val = tnn_value_at(weight, c, ki, kj, c_i);
+						tnn_grad_at(input, b, i_in, j_in, c_i) += grad_val * w_val;
                     }
                 }
             }
@@ -91,7 +77,7 @@ static void conv_backward(tnn_tensor_t *self) {
         for (size_t i_out = 0; i_out < h_out; i_out++) {
         for (size_t j_out = 0; j_out < w_out; j_out++) {
         for (size_t c = 0; c < c_out; c++) {
-            float grad_val = self->grad[access_nd(self, (size_t[]){b, i_out, j_out, c}, 4)];
+			float grad_val = tnn_grad_at(self, b, i_out, j_out, c);
 
             for (size_t ki = 0; ki < k; ki++) {
             for (size_t kj = 0; kj < k; kj++) {
@@ -100,8 +86,8 @@ static void conv_backward(tnn_tensor_t *self) {
 
                 if (i_in >= 0 && i_in < (int)h_in && j_in >= 0 && j_in < (int)w_in) {
                     for (size_t c_i = 0; c_i < c_in; c_i++) {
-                        float in_val = input->data[access_nd(input, (size_t[]){b, i_in, j_in, c_i}, 4)];
-                        weight->grad[access_nd(weight, (size_t[]){c, ki, kj, c_i}, 4)] += grad_val * in_val;
+						float in_val = tnn_value_at(input, b, i_in, j_in, c_i);
+						tnn_grad_at(weight, c, ki, kj, c_i) += grad_val * in_val;
                     }
                 }
             }
@@ -185,15 +171,15 @@ tnn_tensor_t *tnn_conv(tnn_tensor_t *input, tnn_conv_cfg_t cfg) {
 
             if (i_in >= 0 && i_in < (int)h_in && j_in >= 0 && j_in < (int)w_in) {
                 for (size_t c_in_idx = 0; c_in_idx < c_in; c_in_idx++) {
-                    float in_val = input->data[access_nd(input, (size_t[]){b, i_in, j_in, c_in_idx}, 4)];
-                    float w_val = weight->data[access_nd(weight, (size_t[]){c, ki, kj, c_in_idx}, 4)];
+					float in_val = tnn_value_at(input, b, i_in, j_in, c_in_idx);
+					float w_val = tnn_value_at(weight, c, ki, kj, c_in_idx);
                     sum += in_val * w_val;
                 }
             }
         }
         }
 
-        output->data[access_nd(output, (size_t[]){b, i, j, c}, 4)] = sum;
+		tnn_value_at(output, b, i, j, c) = sum;
     }
     }
     }

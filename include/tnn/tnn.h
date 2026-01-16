@@ -33,6 +33,7 @@ typedef struct tnn_tensor {
 } tnn_tensor_t;
 
 tnn_tensor_t *tnn_alloc(const size_t *dims, size_t num_dims);
+
 // gets a state tensor or allocates empty and saves to state dict
 tnn_tensor_t *tnn_alloc_or_get_state(
     const size_t *dims, size_t num_dims, const char *key, bool *allocated
@@ -44,24 +45,36 @@ void tnn_free(tnn_tensor_t *t);
 // creates a copy of the tensor, belonging to a new computation graph. stops
 // backprop and recursive free
 tnn_tensor_t *tnn_detach(tnn_tensor_t *t);
+
 // free tensor t, return detached t (see: tnn_detach)
 tnn_tensor_t *tnn_detach_free(tnn_tensor_t *t);
 
-// in-place initializers
 void tnn_init_from_memory(tnn_tensor_t *t, const float *data);
 void tnn_init_fill(tnn_tensor_t *t, float value);
 void tnn_init_randn(tnn_tensor_t *t);
 
-// utils
 size_t tnn_dim(tnn_tensor_t *t, int32_t i_dim);
 size_t tnn_size(tnn_tensor_t *t);
-size_t tnn_index(tnn_tensor_t *t, size_t *indices, size_t num_indices);
-#define tnn_at(t, ...)                                                         \
-	t->data[tnn_access_nd(                                                     \
+
+// in case there's less indices than dims, treat leading dims as part of the
+// first indexed dim
+// - example usage: output->data[tnn_index_at(output, (size_t[]){b, i, j, c},
+// 4)] = sum;
+// - instead of: output->data[((b * h_out + i) * w_out + j) * c_out + c] = sum;
+size_t tnn_index_at(tnn_tensor_t *t, size_t *indices, size_t num_indices);
+#define tnn_value_at(t, ...)                                                   \
+	t->data[tnn_index_at(                                                      \
 	    t,                                                                     \
 	    (size_t[]){__VA_ARGS__},                                               \
-	    (sizeof((size_t[]){__VA_ARGS__}) / sizeof(size_t))                     \
+	    sizeof((size_t[]){__VA_ARGS__}) / sizeof(size_t)                       \
 	)]
+#define tnn_grad_at(t, ...)                                                    \
+	t->grad[tnn_index_at(                                                      \
+	    t,                                                                     \
+	    (size_t[]){__VA_ARGS__},                                               \
+	    sizeof((size_t[]){__VA_ARGS__}) / sizeof(size_t)                       \
+	)]
+
 void tnn_print(tnn_tensor_t *t);
 float tnn_item(tnn_tensor_t *t);
 

@@ -140,7 +140,7 @@ size_t tnn_size(tnn_tensor_t *t) {
 	return total_size;
 }
 
-size_t tnn_index(tnn_tensor_t *t, size_t *indices, size_t num_indices) {
+size_t tnn_index_at(tnn_tensor_t *t, size_t *indices, size_t num_indices) {
 	// if there's less indices than dims, treat leading dims as part of the
 	// first indexed dim
 	size_t offset = indices[0];
