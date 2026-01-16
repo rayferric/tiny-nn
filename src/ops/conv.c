@@ -1,0 +1,220 @@
+#include <tnn/tnn.h>
+
+#include <assert.h>
+#include <math.h>
+#include <memory.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdio.h>
+
+#include "../impl/malloc.h"
+
+// in case there's less indices than dims, treat leading dims as part of the
+// first indexed dim
+// example usage: output->data[access_nd(output, (size_t[]){b, i, j, c}, 4)] = sum;
+// instead of: output->data[((b * h_out + i) * w_out + j) * c_out + c] = sum;
+static inline size_t
+access_nd(tnn_tensor_t *t, size_t *indices, int num_indices) {
+	size_t offset = indices[0];
+	for (int i = 1; i < num_indices; i++) {
+		// offset = offset * t->dims[i] + indices[i];
+		offset = offset * t->dims[i + (t->num_dims - num_indices)] + indices[i];
+	}
+	return offset;
+}
+
+typedef struct {
+	size_t in_channels;
+	size_t height;
+	size_t width;
+	tnn_conv_cfg_t cfg;
+} conv_context_t;
+
+static void conv_free_context(void *ctx) {
+	free(ctx);
+}
+
+static void conv_backward(tnn_tensor_t *self) {
+	tnn_tensor_t *input = self->parents[0];
+	tnn_tensor_t *weight = self->parents[1];
+
+	assert(self->context != NULL);
+	conv_context_t *ctx = (conv_context_t *)self->context;
+
+	size_t batch = 1;
+	for (size_t i = 0; i < input->num_dims - 3; i++) {
+		batch *= input->dims[i];
+	}
+
+	size_t h_in = ctx->height;
+	size_t w_in = ctx->width;
+	size_t c_in = ctx->in_channels;
+	size_t c_out = ctx->cfg.out_channels;
+	size_t k = ctx->cfg.kernel_size;
+	size_t p = ctx->cfg.padding;
+	size_t s = ctx->cfg.stride;
+
+	size_t h_out = (h_in + 2 * p - k) / s + 1;
+	size_t w_out = (w_in + 2 * p - k) / s + 1;
+
+	if (input->requires_grad) {
+		// clang-format off
+		for (size_t b = 0; b < batch; b++) {
+        for (size_t i_out = 0; i_out < h_out; i_out++) {
+        for (size_t j_out = 0; j_out < w_out; j_out++) {
+        for (size_t c = 0; c < c_out; c++) {
+            float grad_val = self->grad[access_nd(self, (size_t[]){b, i_out, j_out, c}, 4)];
+
+            for (size_t ki = 0; ki < k; ki++) {
+            for (size_t kj = 0; kj < k; kj++) {
+                int i_in = i_out * s + ki - p;
+                int j_in = j_out * s + kj - p;
+
+                if (i_in >= 0 && i_in < (int)h_in && j_in >= 0 && j_in < (int)w_in) {
+                    for (size_t c_i = 0; c_i < c_in; c_i++) {
+                        float w_val = weight->data[access_nd(weight, (size_t[]){c, ki, kj, c_i}, 4)];
+                        input->grad[access_nd(input, (size_t[]){b, i_in, j_in, c_i}, 4)] += grad_val * w_val;
+                    }
+                }
+            }
+            }
+        }
+        }
+        }
+		}
+		// clang-format on
+	}
+
+	if (weight->requires_grad) {
+		// clang-format off
+		for (size_t b = 0; b < batch; b++) {
+        for (size_t i_out = 0; i_out < h_out; i_out++) {
+        for (size_t j_out = 0; j_out < w_out; j_out++) {
+        for (size_t c = 0; c < c_out; c++) {
+            float grad_val = self->grad[access_nd(self, (size_t[]){b, i_out, j_out, c}, 4)];
+
+            for (size_t ki = 0; ki < k; ki++) {
+            for (size_t kj = 0; kj < k; kj++) {
+                int i_in = i_out * s + ki - p;
+                int j_in = j_out * s + kj - p;
+
+                if (i_in >= 0 && i_in < (int)h_in && j_in >= 0 && j_in < (int)w_in) {
+                    for (size_t c_i = 0; c_i < c_in; c_i++) {
+                        float in_val = input->data[access_nd(input, (size_t[]){b, i_in, j_in, c_i}, 4)];
+                        weight->grad[access_nd(weight, (size_t[]){c, ki, kj, c_i}, 4)] += grad_val * in_val;
+                    }
+                }
+            }
+            }
+        }
+        }
+        }
+		}
+		// clang-format on
+	}
+}
+
+tnn_tensor_t *tnn_conv(tnn_tensor_t *input, tnn_conv_cfg_t cfg) {
+	assert(input->num_dims >= 3);
+
+	size_t batch = 1;
+	for (size_t i = 0; i < input->num_dims - 3; i++) {
+		batch *= input->dims[i];
+	}
+
+	size_t h_in = input->dims[input->num_dims - 3];
+	size_t w_in = input->dims[input->num_dims - 2];
+	size_t c_in = input->dims[input->num_dims - 1];
+
+	// available space to slide: (h_in + 2*padding - kernel_size)
+	// this is the distance from first to last valid kernel position
+	// ---
+	// number of steps taken: distance / stride
+	// if stride=2, you only count every other position
+	// ---
+	// positions = steps + 1 (fencepost problem)
+	size_t h_out = (h_in + 2 * cfg.padding - cfg.kernel_size) / cfg.stride + 1;
+	size_t w_out = (w_in + 2 * cfg.padding - cfg.kernel_size) / cfg.stride + 1;
+
+	// weight dims: [out_channels, kernel_size, kernel_size, in_channels]
+	size_t weight_dims[4] = {
+	    cfg.out_channels, cfg.kernel_size, cfg.kernel_size, c_in
+	};
+	bool weight_created = false;
+	tnn_tensor_t *weight =
+	    tnn_alloc_or_get_state(weight_dims, 4, "conv", &weight_created);
+	weight->requires_grad = true;
+	if (weight_created) {
+		// uniform xavier init
+		size_t fan_in = cfg.kernel_size * cfg.kernel_size * c_in;
+		size_t fan_out = cfg.kernel_size * cfg.kernel_size * cfg.out_channels;
+
+		float limit = sqrtf(6.0f / (fan_in + fan_out));
+
+		size_t total_size = tnn_size(weight);
+		for (size_t i = 0; i < total_size; i++) {
+			float u = (float)rand() / (float)RAND_MAX;
+			weight->data[i] = u * 2.0f * limit - limit;
+		}
+	}
+
+	size_t output_dims[100];
+	if (input->num_dims > 100) {
+		fprintf(stderr, "input has too many dims (%zu)\n", input->num_dims);
+		exit(1);
+	}
+	memcpy(output_dims, input->dims, (input->num_dims - 3) * sizeof(size_t));
+	output_dims[input->num_dims - 3] = h_out;
+	output_dims[input->num_dims - 2] = w_out;
+	output_dims[input->num_dims - 1] = cfg.out_channels;
+
+	tnn_tensor_t *output = tnn_alloc(output_dims, input->num_dims);
+
+	// forward pass
+	// clang-format off
+    for (size_t b = 0; b < batch; b++) {
+    for (size_t i = 0; i < h_out; i++) {
+    for (size_t j = 0; j < w_out; j++) {
+    for (size_t c = 0; c < cfg.out_channels; c++) {
+        float sum = 0.0f;
+
+        for (size_t ki = 0; ki < cfg.kernel_size; ki++) {
+        for (size_t kj = 0; kj < cfg.kernel_size; kj++) {
+            int i_in = i * cfg.stride + ki - cfg.padding;
+            int j_in = j * cfg.stride + kj - cfg.padding;
+
+            if (i_in >= 0 && i_in < (int)h_in && j_in >= 0 && j_in < (int)w_in) {
+                for (size_t c_in_idx = 0; c_in_idx < c_in; c_in_idx++) {
+                    float in_val = input->data[access_nd(input, (size_t[]){b, i_in, j_in, c_in_idx}, 4)];
+                    float w_val = weight->data[access_nd(weight, (size_t[]){c, ki, kj, c_in_idx}, 4)];
+                    sum += in_val * w_val;
+                }
+            }
+        }
+        }
+
+        output->data[access_nd(output, (size_t[]){b, i, j, c}, 4)] = sum;
+    }
+    }
+    }
+	}
+	// clang-format on
+
+	conv_context_t *ctx = tnn_safe_malloc(sizeof(conv_context_t));
+	ctx->in_channels = c_in;
+	ctx->height = h_in;
+	ctx->width = w_in;
+	ctx->cfg = cfg;
+
+	output->parents[0] = input;
+	output->parents[1] = weight;
+	output->num_parents = 2;
+	output->requires_grad = true;
+	input->num_children++;
+	weight->num_children++;
+	output->backward = conv_backward;
+	output->context = ctx;
+	output->free_context = conv_free_context;
+
+	return output;
+}

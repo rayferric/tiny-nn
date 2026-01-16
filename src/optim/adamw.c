@@ -9,7 +9,7 @@
 
 #include "./impl/key_str_utils.h"
 
-void tnn_adamw(tnn_adamw_cfg_t cfg) {
+void _tnn_adamw(tnn_adamw_cfg_t cfg) {
 	char full_scope[TNN_STATE_KEY_MAX_LEN];
 	_tnn_cat_keys(full_scope, tnn_state.active_scope, cfg.scope);
 
@@ -54,10 +54,10 @@ void tnn_adamw(tnn_adamw_cfg_t cfg) {
 
 				// zero init if newly created
 				if (m1_created) {
-					tnn_init_zeros(m1);
+					tnn_init_fill(m1, 0);
 				}
 				if (m2_created) {
-					tnn_init_zeros(m2);
+					tnn_init_fill(m2, 0);
 				}
 				if (timestep_created) {
 					timestep->data[0] = 0.0f;

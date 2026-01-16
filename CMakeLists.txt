@@ -14,3 +14,6 @@ target_link_libraries(tnn PRIVATE m)
 
 add_executable(tnn_example__mnist_mlp__train example/mnist_mlp/train.c)
 target_link_libraries(tnn_example__mnist_mlp__train PRIVATE tnn)
+
+add_executable(tnn_example__cifar100_resnet__train example/cifar100_resnet/train.c)
+target_link_libraries(tnn_example__cifar100_resnet__train PRIVATE tnn)

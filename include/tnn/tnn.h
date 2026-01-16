@@ -20,14 +20,13 @@ typedef struct tnn_tensor {
 	size_t *dims;
 	size_t num_dims;
 
-	bool requires_grad; // will get a gradient during backprop
-	bool is_state;      // should not be freed by tnn_free()
-
 	// computation graph
-	struct tnn_tensor *parents[3];
+	struct tnn_tensor *parents[10];
 	size_t num_parents;
 	size_t num_children; // ref-count
+	bool is_state;       // should not be freed by tnn_free()
 
+	bool requires_grad; // will get a gradient when child's backward() is called
 	void (*backward)(struct tnn_tensor *);
 	void *context; // pass more info from forward to backward
 	void (*free_context)(void *);
@@ -45,16 +44,24 @@ void tnn_free(tnn_tensor_t *t);
 // creates a copy of the tensor, belonging to a new computation graph. stops
 // backprop and recursive free
 tnn_tensor_t *tnn_detach(tnn_tensor_t *t);
+// free tensor t, return detached t (see: tnn_detach)
+tnn_tensor_t *tnn_detach_free(tnn_tensor_t *t);
 
 // in-place initializers
 void tnn_init_from_memory(tnn_tensor_t *t, const float *data);
-void tnn_init_zeros(tnn_tensor_t *t);
-void tnn_init_xavier(tnn_tensor_t *t);
+void tnn_init_fill(tnn_tensor_t *t, float value);
 void tnn_init_randn(tnn_tensor_t *t);
 
 // utils
 size_t tnn_dim(tnn_tensor_t *t, int32_t i_dim);
 size_t tnn_size(tnn_tensor_t *t);
+size_t tnn_index(tnn_tensor_t *t, size_t *indices, size_t num_indices);
+#define tnn_at(t, ...)                                                         \
+	t->data[tnn_access_nd(                                                     \
+	    t,                                                                     \
+	    (size_t[]){__VA_ARGS__},                                               \
+	    (sizeof((size_t[]){__VA_ARGS__}) / sizeof(size_t))                     \
+	)]
 void tnn_print(tnn_tensor_t *t);
 float tnn_item(tnn_tensor_t *t);
 
@@ -85,34 +92,32 @@ void tnn_drop_state(const char *key);
 // impl: src/ops/*.c
 ///
 
-// tnn_tensor_t *
-// tnn_reshape(tnn_tensor_t *input, const size_t *dims, size_t num_dims);
+tnn_tensor_t *
+tnn_reshape(tnn_tensor_t *input, const size_t *dims, size_t num_dims);
 tnn_tensor_t *tnn_proj(tnn_tensor_t *input, size_t dim_out);
 tnn_tensor_t *tnn_bias(tnn_tensor_t *input);
 // tnn_tensor_t *tnn_scale(tnn_tensor_t *input);
 tnn_tensor_t *tnn_relu(tnn_tensor_t *input);
 
+// tnn_tensor_t *_tnn_bn(tnn_tensor_t *input, float momentum);
+// #define tnn_bn(...) OPTARG_FUNC(tnn_bn, __VA_ARGS__)
+// #define tnn_bn_1(input) _tnn_bn(input, 0.9)
+// #define tnn_bn_2(input, momentum) _tnn_bn(input, momentum)
+
 // - pred is raw logits 2D [batch_size, num_classes]
 // - target is one-hot encoded 2D [batch_size, num_classes]
 tnn_tensor_t *tnn_cross_entropy(tnn_tensor_t *pred, tnn_tensor_t *target);
 
-// // - input: [..., height, width, in_channels]
-// // - kernel_size: size of the square kernel (e.g., 3 for 3x3)
-// // - stride: stride for convolution
-// // - padding: padding added to all sides
-// // - out_channels: number of output channels
-// tnn_tensor_t *tnn_conv(
-//     tnn_tensor_t *input,
-//     size_t out_channels,
-//     size_t kernel_size,
-//     size_t stride,
-//     size_t padding
-// );
-
-// // normalization with running mean/var
-// // - input: [..., height, width, channels]
-// // - momentum: momentum for running mean/var update
-// tnn_tensor_t *tnn_bn(tnn_tensor_t *input, float momentum);
+typedef struct {
+	size_t out_channels;
+	size_t kernel_size;
+	size_t padding;
+	size_t stride;
+} tnn_conv_cfg_t;
+#define TNN_CONV_CFG(...)                                                      \
+	((tnn_conv_cfg_t){.kernel_size = 3, .padding = 1, .stride = 1, __VA_ARGS__})
+// input dim is [..., height, width, in_channels]
+tnn_tensor_t *tnn_conv(tnn_tensor_t *input, tnn_conv_cfg_t cfg);
 
 ///
 // BACKPROP
@@ -148,4 +153,7 @@ typedef struct {
 	                   .scope = NULL,                                          \
 	                   __VA_ARGS__})
 
-void tnn_adamw(tnn_adamw_cfg_t cfg);
+void _tnn_adamw(tnn_adamw_cfg_t cfg);
+#define tnn_adamw(...) OPTARG_FUNC(tnn_adamw, __VA_ARGS__)
+#define tnn_adamw_0() _tnn_adamw(TNN_ADAMW_CFG())
+#define tnn_adamw_1(cfg) _tnn_adamw(cfg)

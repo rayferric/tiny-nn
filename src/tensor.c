@@ -91,30 +91,14 @@ void tnn_free(tnn_tensor_t *t) {
 }
 
 tnn_tensor_t *tnn_detach(tnn_tensor_t *t) {
-	tnn_tensor_t *detached = tnn_safe_malloc(sizeof(tnn_tensor_t));
+	tnn_tensor_t *detached = tnn_alloc(t->dims, t->num_dims);
+	tnn_init_from_memory(detached, t->data);
+	return detached;
+}
 
-	detached->num_dims = t->num_dims;
-	if (t->num_dims > 0) {
-		detached->dims = tnn_safe_malloc(t->num_dims * sizeof(size_t));
-		memcpy(detached->dims, t->dims, t->num_dims * sizeof(size_t));
-	} else {
-		detached->dims = NULL;
-	}
-
-	size_t total_size = tnn_size(t);
-	detached->data = tnn_safe_malloc(total_size * sizeof(float));
-	memcpy(detached->data, t->data, total_size * sizeof(float));
-
-	detached->grad = NULL;
-	detached->requires_grad = false;
-	detached->is_state = false;
-
-	detached->num_parents = 0;
-	detached->num_children = 0;
-	detached->backward = NULL;
-	detached->context = NULL;
-	detached->free_context = NULL;
-
+tnn_tensor_t *tnn_detach_free(tnn_tensor_t *t) {
+	tnn_tensor_t *detached = tnn_detach(t);
+	tnn_free(t);
 	return detached;
 }
 
@@ -123,24 +107,9 @@ void tnn_init_from_memory(tnn_tensor_t *t, const float *data) {
 	memcpy(t->data, data, total_size * sizeof(float));
 }
 
-void tnn_init_zeros(tnn_tensor_t *t) {
+void tnn_init_fill(tnn_tensor_t *t, float value) {
 	size_t total_size = tnn_size(t);
-	memset(t->data, 0, total_size * sizeof(float));
-}
-
-void tnn_init_xavier(tnn_tensor_t *t) {
-	assert(t->num_dims >= 2);
-
-	size_t fan_in = t->dims[t->num_dims - 2];
-	size_t fan_out = t->dims[t->num_dims - 1];
-
-	float limit = sqrtf(6.0f / (fan_in + fan_out));
-
-	size_t total_size = tnn_size(t);
-	for (size_t i = 0; i < total_size; i++) {
-		float u = (float)rand() / (float)RAND_MAX;
-		t->data[i] = u * 2.0f * limit - limit;
-	}
+	memset(t->data, value, total_size * sizeof(float));
 }
 
 void tnn_init_randn(tnn_tensor_t *t) {
@@ -169,6 +138,16 @@ size_t tnn_size(tnn_tensor_t *t) {
 		total_size *= t->dims[i];
 	}
 	return total_size;
+}
+
+size_t tnn_index(tnn_tensor_t *t, size_t *indices, size_t num_indices) {
+	// if there's less indices than dims, treat leading dims as part of the
+	// first indexed dim
+	size_t offset = indices[0];
+	for (size_t i = 1; i < num_indices; i++) {
+		offset = offset * t->dims[i + (t->num_dims - num_indices)] + indices[i];
+	}
+	return offset;
 }
 
 void tnn_print(tnn_tensor_t *t) {

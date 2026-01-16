@@ -2,8 +2,10 @@
 
 #include <assert.h>
 #include <math.h>
+#include <memory.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdio.h>
 
 static void matmul(
     const float *a,
@@ -46,8 +48,8 @@ static void proj_backward(tnn_tensor_t *self) {
 	size_t dim_in = weight->dims[0];
 	size_t dim_out = weight->dims[1];
 
-	// input->grad = self->grad @ weight^T
 	if (input->requires_grad) {
+		// input->grad = self->grad @ weight^T
 		matmul(
 		    self->grad,
 		    weight->data,
@@ -61,18 +63,20 @@ static void proj_backward(tnn_tensor_t *self) {
 		);
 	}
 
-	// weight->grad += input^T @ self->grad
-	matmul(
-	    input->data,
-	    self->grad,
-	    weight->grad,
-	    dim_in,
-	    dim_batch,
-	    dim_out,
-	    true,
-	    false,
-	    true
-	);
+	if (weight->requires_grad) {
+		// weight->grad += input^T @ self->grad
+		matmul(
+		    input->data,
+		    self->grad,
+		    weight->grad,
+		    dim_in,
+		    dim_batch,
+		    dim_out,
+		    true,
+		    false,
+		    true
+		);
+	}
 }
 
 tnn_tensor_t *tnn_proj(tnn_tensor_t *input, size_t dim_out) {
@@ -91,12 +95,27 @@ tnn_tensor_t *tnn_proj(tnn_tensor_t *input, size_t dim_out) {
 	    tnn_alloc_or_get_state(weight_dims, 2, "proj", &weight_created);
 	weight->requires_grad = true;
 	if (weight_created) {
-		tnn_init_xavier(weight);
+		// uniform xavier init
+		size_t fan_in = weight->dims[weight->num_dims - 2];
+		size_t fan_out = weight->dims[weight->num_dims - 1];
+
+		float limit = sqrtf(6.0f / (fan_in + fan_out));
+
+		size_t total_size = tnn_size(weight);
+		for (size_t i = 0; i < total_size; i++) {
+			float u = (float)rand() / (float)RAND_MAX;
+			weight->data[i] = u * 2.0f * limit - limit;
+		}
 	}
 
-	// alloc output
-	size_t output_dims[2] = {dim_batch, dim_out};
-	tnn_tensor_t *output = tnn_alloc(output_dims, 2);
+	size_t output_dims[100];
+	if (input->num_dims > 100) {
+		fprintf(stderr, "input has too many dims (%zu)\n", input->num_dims);
+		exit(1);
+	}
+	memcpy(output_dims, input->dims, (input->num_dims - 1) * sizeof(size_t));
+	output_dims[input->num_dims - 1] = dim_out;
+	tnn_tensor_t *output = tnn_alloc(output_dims, input->num_dims);
 
 	// output = input @ weight
 	matmul(
@@ -111,10 +130,10 @@ tnn_tensor_t *tnn_proj(tnn_tensor_t *input, size_t dim_out) {
 	    false  // no accum
 	);
 
-	output->requires_grad = true;
 	output->parents[0] = input;
 	output->parents[1] = weight;
 	output->num_parents = 2;
+	output->requires_grad = true;
 	input->num_children++;
 	weight->num_children++;
 	output->backward = proj_backward;

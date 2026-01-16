@@ -20,9 +20,7 @@ int main() {
 	    "/home/rayferric/Source/tiny-nn/data/train-labels.idx1-ubyte"
 	);
 
-	mlp_cfg_t mlp_cfg =
-	    MLP_CFG(.dim_out = 10, .dim_hidden = 128, .num_hidden = 2);
-	tnn_adamw_cfg_t adamw_cfg = TNN_ADAMW_CFG(.lr = 0.001f);
+	mlp_cfg_t mlp_cfg = {.dim_out = 10, .dim_hidden = 128, .num_hidden = 2};
 
 	const size_t num_epochs = 1;
 	const size_t num_steps = 50;
@@ -39,7 +37,7 @@ int main() {
 
 			tnn_zero_grad();
 			tnn_backward(loss);
-			tnn_adamw(adamw_cfg);
+			tnn_adamw();
 
 			printf("\nStep %d/%zu: ", i + 1, num_steps);
 			printf("loss=");
@@ -54,7 +52,7 @@ int main() {
 
 	char *keys[1024];
 	size_t num_keys = tnn_list_state_keys(keys);
-	printf("\n\nState table:\n");
+	printf("\n\nState keys:\n");
 	for (size_t i = 0; i < num_keys; i++) {
 		printf("- %s\n", keys[i]);
 	}

@@ -47,7 +47,7 @@ tnn_tensor_t *tnn_bias(tnn_tensor_t *input) {
 	    tnn_alloc_or_get_state(bias_dims, 1, "bias", &bias_created);
 	bias->requires_grad = true;
 	if (bias_created) {
-		tnn_init_zeros(bias);
+		tnn_init_fill(bias, 0);
 	}
 
 	// alloc output with same dims as input
