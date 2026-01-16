@@ -43,61 +43,38 @@ static void conv_backward(tnn_tensor_t *self) {
 	size_t h_out = (h_in + 2 * p - k) / s + 1;
 	size_t w_out = (w_in + 2 * p - k) / s + 1;
 
-	if (input->requires_grad) {
-		// clang-format off
-		for (size_t b = 0; b < batch; b++) {
-        for (size_t i_out = 0; i_out < h_out; i_out++) {
-        for (size_t j_out = 0; j_out < w_out; j_out++) {
-        for (size_t c = 0; c < c_out; c++) {
-			float grad_val = tnn_grad_at(self, b, i_out, j_out, c);
+	// clang-format off
+	for (size_t b = 0; b < batch; b++) {
+	for (size_t i_out = 0; i_out < h_out; i_out++) {
+	for (size_t j_out = 0; j_out < w_out; j_out++) {
+	for (size_t c = 0; c < c_out; c++) {
+		float grad_val = tnn_grad_at(self, b, i_out, j_out, c);
 
-            for (size_t ki = 0; ki < k; ki++) {
-            for (size_t kj = 0; kj < k; kj++) {
-                int i_in = i_out * s + ki - p;
-                int j_in = j_out * s + kj - p;
+		for (size_t ki = 0; ki < k; ki++) {
+		for (size_t kj = 0; kj < k; kj++) {
+			int i_in = i_out * s + ki - p;
+			int j_in = j_out * s + kj - p;
 
-                if (i_in >= 0 && i_in < (int)h_in && j_in >= 0 && j_in < (int)w_in) {
-                    for (size_t c_i = 0; c_i < c_in; c_i++) {
+			if (i_in >= 0 && i_in < (int)h_in && j_in >= 0 && j_in < (int)w_in) {
+				for (size_t c_i = 0; c_i < c_in; c_i++) {
+					if (input->requires_grad) {
 						float w_val = tnn_value_at(weight, c, ki, kj, c_i);
 						tnn_grad_at(input, b, i_in, j_in, c_i) += grad_val * w_val;
-                    }
-                }
-            }
-            }
-        }
-        }
-        }
-		}
-		// clang-format on
-	}
+					}
 
-	if (weight->requires_grad) {
-		// clang-format off
-		for (size_t b = 0; b < batch; b++) {
-        for (size_t i_out = 0; i_out < h_out; i_out++) {
-        for (size_t j_out = 0; j_out < w_out; j_out++) {
-        for (size_t c = 0; c < c_out; c++) {
-			float grad_val = tnn_grad_at(self, b, i_out, j_out, c);
-
-            for (size_t ki = 0; ki < k; ki++) {
-            for (size_t kj = 0; kj < k; kj++) {
-                int i_in = i_out * s + ki - p;
-                int j_in = j_out * s + kj - p;
-
-                if (i_in >= 0 && i_in < (int)h_in && j_in >= 0 && j_in < (int)w_in) {
-                    for (size_t c_i = 0; c_i < c_in; c_i++) {
+					if (weight->requires_grad) {
 						float in_val = tnn_value_at(input, b, i_in, j_in, c_i);
 						tnn_grad_at(weight, c, ki, kj, c_i) += grad_val * in_val;
-                    }
-                }
-            }
-            }
-        }
-        }
-        }
+					}
+				}
+			}
 		}
-		// clang-format on
+		}
 	}
+	}
+	}
+	}
+	// clang-format on
 }
 
 tnn_tensor_t *tnn_conv(tnn_tensor_t *input, tnn_conv_cfg_t cfg) {
