@@ -53,26 +53,26 @@ int main() {
     // tnn_load("mnist.tnn");
 
     for (int i = 0; i < 100; i++) {
-        tnn_tensor_t *x, *y; // TNN_INPUT
+        tnn_tensor_t *x, *y;
         // ... load x, y from dataset ...
 
-        tnn_tensor_t *y_pred = mlp(x, 10, 128, 2); // TNN_OUTPUT
-        tnn_tensor_t *loss = tnn_cross_entropy(y_pred, y); // TNN_OUTPUT
+        tnn_tensor_t *y_pred = mlp(x, 10, 128, 2);
+        tnn_tensor_t *loss = tnn_cross_entropy(y_pred, y);
 
         tnn_zero_grad();
         tnn_backward(loss);
-        tnn_adamw(TNN_ADAMW_CFG());
+        tnn_adamw();
         // tnn_adamw creates "adamw/..." scope for optimizer buffers
 
         printf("\nloss: ");
         tnn_print(loss);
 
         // Remember to free the computation graph!
-        tnn_free(loss, TNN_INPUT | TNN_OUTPUT);
+        tnn_free(loss);
     }
 
     // Strip optimizer if not checkpointing:
-    tnn_drop("adamw");
+    tnn_drop_state("adamw");
 
     tnn_save("mlp.tnn");
     tnn_terminate();
