@@ -39,13 +39,20 @@ static inline tnn_tensor_t *resnet(
     size_t num_layers,
     size_t num_blocks_per_layer
 ) {
-	x = tnn_relu(tnn_bn(tnn_conv(x, base_dim, 3, 1, 1)));
-	for (size_t i = 0; i < num_layers; i++) {
-		size_t dim_out = base_dim * (1 << (i + 1));
-		TNN_SCOPE("layer%zu", i) {
-			x = resnet_layer(x, dim_out, num_blocks_per_layer, 2);
+	TNN_SCOPE("resnet") {
+		TNN_SCOPE("init") {
+			x = tnn_relu(tnn_bn(tnn_conv(x, base_dim, 3, 1, 1)));
+		}
+		for (size_t i = 0; i < num_layers; i++) {
+			size_t dim_out = base_dim * (1 << (i + 1));
+			TNN_SCOPE("layer%zu", i) {
+				x = resnet_layer(x, dim_out, num_blocks_per_layer, 2);
+			}
+		}
+		TNN_SCOPE("head") {
+			x = tnn_mean(x, 1, 2); // -> [N, C]
+			x = tnn_proj(x, num_cls);
 		}
 	}
-	x = tnn_mean(x, 1, 2); // -> [N, C]
-	return tnn_proj(x, num_cls);
+	return x;
 }
