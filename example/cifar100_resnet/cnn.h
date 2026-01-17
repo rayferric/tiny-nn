@@ -21,7 +21,7 @@ tnn_tensor_t *cnn(tnn_tensor_t *input, cnn_cfg_t cfg) {
 					    cfg.base_channels * (1 << i); // 32, 64, 128, ...
 
 					input = tnn_relu(tnn_bias(tnn_conv(
-					    input,
+					    tnn_bn(input),
 					    TNN_CONV_CFG(
 					            .out_channels = out_channels,
 					            .kernel_size = 3,

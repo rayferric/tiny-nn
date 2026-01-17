@@ -112,10 +112,11 @@ tnn_tensor_t *tnn_bias(tnn_tensor_t *input);
 // tnn_tensor_t *tnn_scale(tnn_tensor_t *input);
 tnn_tensor_t *tnn_relu(tnn_tensor_t *input);
 
-// tnn_tensor_t *_tnn_bn(tnn_tensor_t *input, float momentum);
-// #define tnn_bn(...) OPTARG_FUNC(tnn_bn, __VA_ARGS__)
-// #define tnn_bn_1(input) _tnn_bn(input, 0.9)
-// #define tnn_bn_2(input, momentum) _tnn_bn(input, momentum)
+tnn_tensor_t *_tnn_bn(tnn_tensor_t *input, float momentum, bool test);
+#define tnn_bn(...) OPTARG_FUNC(tnn_bn, __VA_ARGS__)
+#define tnn_bn_1(input) _tnn_bn(input, 0.9, false)
+#define tnn_bn_2(input, momentum) _tnn_bn(input, momentum, false)
+#define tnn_bn_3(input, momentum, test) _tnn_bn(input, momentum, test)
 
 // - pred is raw logits 2D [batch_size, num_classes]
 // - target is one-hot encoded 2D [batch_size, num_classes]
