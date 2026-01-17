@@ -4,7 +4,7 @@
 
 #include "./accuracy.h"
 #include "./cifar100.h"
-#include "./cnn.h"
+#include "./resnet.h"
 
 int main() {
 	if (tnn_init()) {
@@ -42,8 +42,7 @@ int main() {
 			//         MLP_CFG(.dim_out = CIFAR100_NUM_CATEGORIES,
 			//                 .dim_hidden = 128,
 			//                 .num_hidden = 2));
-			tnn_tensor_t *y_pred =
-			    cnn(x, CNN_CFG(.dim_out = CIFAR100_NUM_CATEGORIES));
+			tnn_tensor_t *y_pred = resnet(x, CIFAR100_NUM_CATEGORIES, 8, 1, 1);
 			tnn_tensor_t *loss = tnn_cross_entropy(y_pred, y);
 
 			tnn_zero_grad();

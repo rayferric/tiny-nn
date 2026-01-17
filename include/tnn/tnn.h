@@ -111,6 +111,12 @@ tnn_tensor_t *tnn_proj(tnn_tensor_t *input, size_t dim_out);
 tnn_tensor_t *tnn_bias(tnn_tensor_t *input);
 // tnn_tensor_t *tnn_scale(tnn_tensor_t *input);
 tnn_tensor_t *tnn_relu(tnn_tensor_t *input);
+tnn_tensor_t *tnn_add(tnn_tensor_t *a, tnn_tensor_t *b);
+
+tnn_tensor_t *_tnn_mean(tnn_tensor_t *input, size_t i_dim, size_t num_dims);
+#define tnn_mean(...) OPTARG_FUNC(tnn_mean, __VA_ARGS__)
+#define tnn_mean_2(input, i_dim) _tnn_mean(input, i_dim, 1)
+#define tnn_mean_3(input, i_dim, num_dims) _tnn_mean(input, i_dim, num_dims)
 
 tnn_tensor_t *_tnn_bn(tnn_tensor_t *input, float momentum, bool test);
 #define tnn_bn(...) OPTARG_FUNC(tnn_bn, __VA_ARGS__)
@@ -122,16 +128,22 @@ tnn_tensor_t *_tnn_bn(tnn_tensor_t *input, float momentum, bool test);
 // - target is one-hot encoded 2D [batch_size, num_classes]
 tnn_tensor_t *tnn_cross_entropy(tnn_tensor_t *pred, tnn_tensor_t *target);
 
-typedef struct {
-	size_t out_channels;
-	size_t kernel_size;
-	size_t padding;
-	size_t stride;
-} tnn_conv_cfg_t;
-#define TNN_CONV_CFG(...)                                                      \
-	((tnn_conv_cfg_t){.kernel_size = 3, .padding = 1, .stride = 1, __VA_ARGS__})
 // input dim is [..., height, width, in_channels]
-tnn_tensor_t *tnn_conv(tnn_tensor_t *input, tnn_conv_cfg_t cfg);
+tnn_tensor_t *_tnn_conv(
+    tnn_tensor_t *input,
+    size_t dim_out,
+    size_t kernel_size,
+    size_t stride,
+    size_t padding
+);
+#define tnn_conv(...) OPTARG_FUNC(tnn_conv, __VA_ARGS__)
+#define tnn_conv_2(input, dim_out) _tnn_conv(input, dim_out, 3, 1, 1)
+#define tnn_conv_3(input, dim_out, kernel_size)                                \
+	_tnn_conv(input, dim_out, kernel_size, 1, 1)
+#define tnn_conv_4(input, dim_out, kernel_size, stride)                        \
+	_tnn_conv(input, dim_out, kernel_size, stride, 1)
+#define tnn_conv_5(input, dim_out, kernel_size, stride, padding)               \
+	_tnn_conv(input, dim_out, kernel_size, stride, padding)
 
 ///
 // BACKPROP
