@@ -10,13 +10,13 @@
 #include "./impl/key_str_utils.h"
 
 void _tnn_adamw(tnn_adamw_cfg_t cfg) {
-	char full_scope[TNN_STATE_KEY_MAX_LEN];
-	_tnn_cat_keys(full_scope, tnn_state.active_scope, cfg.scope);
+	char full_scope[STATE_DICT_KEY_MAX_LEN];
+	cat_keys(full_scope, global_state.active_scope, cfg.scope);
 
-	for (size_t i = 0; i < TNN_STATE_DICT_SIZE; i++) {
-		tnn_state_entry_t *entry = tnn_state.state_dict[i];
+	for (size_t i = 0; i < STATE_DICT_HASHMAP_SIZE; i++) {
+		state_entry_t *entry = global_state.state_dict[i];
 		while (entry != NULL) {
-			if (!_tnn_key_in_scope(entry->key, full_scope) ||
+			if (!key_in_scope(entry->key, full_scope) ||
 			    !entry->param->requires_grad || entry->param->grad == NULL) {
 				entry = entry->next;
 				continue;
@@ -24,19 +24,18 @@ void _tnn_adamw(tnn_adamw_cfg_t cfg) {
 
 			tnn_tensor_t *param = entry->param;
 
-			const char *param_rel_key =
-			    _tnn_relative_key(entry->key, full_scope);
+			const char *param_rel_key = relative_key(entry->key, full_scope);
 			assert(param_rel_key != NULL);
 
 			// get or create m1 and m2 for this param
 			tnn_tensor_t *m1, *m2, *timestep;
 			TNN_SCOPE("adamw") {
-				char m1_rel_key[TNN_STATE_KEY_MAX_LEN];
-				char m2_rel_key[TNN_STATE_KEY_MAX_LEN];
-				char timestep_rel_key[TNN_STATE_KEY_MAX_LEN];
-				_tnn_cat_keys(m1_rel_key, param_rel_key, "m1");
-				_tnn_cat_keys(m2_rel_key, param_rel_key, "m2");
-				_tnn_cat_keys(timestep_rel_key, param_rel_key, "t");
+				char m1_rel_key[STATE_DICT_KEY_MAX_LEN];
+				char m2_rel_key[STATE_DICT_KEY_MAX_LEN];
+				char timestep_rel_key[STATE_DICT_KEY_MAX_LEN];
+				cat_keys(m1_rel_key, param_rel_key, "m1");
+				cat_keys(m2_rel_key, param_rel_key, "m2");
+				cat_keys(timestep_rel_key, param_rel_key, "t");
 
 				bool m1_created = false;
 				bool m2_created = false;

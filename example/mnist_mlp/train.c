@@ -50,7 +50,7 @@ int main() {
 		}
 	}
 
-	char *keys[1024];
+	char *keys[TNN_LIST_STATE_KEYS_MAX_LENGTH];
 	size_t num_keys = tnn_list_state_keys(keys);
 	printf("\n\nState keys:\n");
 	for (size_t i = 0; i < num_keys; i++) {

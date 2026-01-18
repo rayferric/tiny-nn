@@ -87,9 +87,8 @@ tnn_tensor_t *tnn_cross_entropy(tnn_tensor_t *pred, tnn_tensor_t *target) {
 	// allocate context for storing softmax values
 	cross_entropy_context_t *ctx;
 	if (output->requires_grad) {
-		ctx = tnn_safe_malloc(sizeof(cross_entropy_context_t));
-		ctx->softmax =
-		    tnn_safe_malloc(batch_size * num_classes * sizeof(float));
+		ctx = safe_malloc(sizeof(cross_entropy_context_t));
+		ctx->softmax = safe_malloc(batch_size * num_classes * sizeof(float));
 	}
 
 	float total_loss = 0.0f;

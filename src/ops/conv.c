@@ -170,7 +170,7 @@ tnn_tensor_t *_tnn_conv(
 	}
 	// clang-format on
 
-	conv_context_t *ctx = tnn_safe_malloc(sizeof(conv_context_t));
+	conv_context_t *ctx = safe_malloc(sizeof(conv_context_t));
 	ctx->in_channels = c_in;
 	ctx->height = h_in;
 	ctx->width = w_in;

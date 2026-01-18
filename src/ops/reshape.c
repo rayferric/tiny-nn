@@ -55,7 +55,7 @@ tnn_reshape(tnn_tensor_t *input, const size_t *dims, size_t num_dims) {
 			known_size *= dims[i];
 		}
 	}
-	size_t *actual_dims = tnn_safe_malloc(num_dims * sizeof(size_t));
+	size_t *actual_dims = safe_malloc(num_dims * sizeof(size_t));
 	memcpy(actual_dims, dims, num_dims * sizeof(size_t));
 	if (zero_idx >= 0) {
 		assert(input_size % known_size == 0 && "size must divide evenly");
@@ -71,9 +71,9 @@ tnn_reshape(tnn_tensor_t *input, const size_t *dims, size_t num_dims) {
 	    input_size == output_size && "reshape: total size must remain the same"
 	);
 
-	reshape_context_t *ctx = tnn_safe_malloc(sizeof(reshape_context_t));
+	reshape_context_t *ctx = safe_malloc(sizeof(reshape_context_t));
 	ctx->input_num_dims = input->num_dims;
-	ctx->input_dims = tnn_safe_malloc(input->num_dims * sizeof(size_t));
+	ctx->input_dims = safe_malloc(input->num_dims * sizeof(size_t));
 	memcpy(ctx->input_dims, input->dims, input->num_dims * sizeof(size_t));
 
 	tnn_tensor_t *output = tnn_alloc(actual_dims, num_dims);

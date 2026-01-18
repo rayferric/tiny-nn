@@ -12,18 +12,18 @@
 #include "./impl/malloc.h"
 
 tnn_tensor_t *tnn_alloc(const size_t *dims, size_t num_dims) {
-	tnn_tensor_t *t = tnn_safe_malloc(sizeof(tnn_tensor_t));
+	tnn_tensor_t *t = safe_malloc(sizeof(tnn_tensor_t));
 
 	t->num_dims = num_dims;
 	if (num_dims > 0) {
-		t->dims = tnn_safe_malloc(num_dims * sizeof(size_t));
+		t->dims = safe_malloc(num_dims * sizeof(size_t));
 		memcpy(t->dims, dims, num_dims * sizeof(size_t));
 	} else {
 		t->dims = NULL;
 	}
 
 	size_t total_size = tnn_size(t);
-	t->data = tnn_safe_malloc(total_size * sizeof(float));
+	t->data = safe_malloc(total_size * sizeof(float));
 	t->grad = NULL;
 
 	t->requires_grad = false;

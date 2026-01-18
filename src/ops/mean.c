@@ -50,7 +50,7 @@ tnn_tensor_t *_tnn_mean(tnn_tensor_t *input, size_t i_dim, size_t num_dims) {
 
 	// calculate output dimensions - remove the reduced dimensions
 	size_t output_num_dims = input->num_dims - num_dims;
-	size_t *output_dims = tnn_safe_malloc(output_num_dims * sizeof(size_t));
+	size_t *output_dims = safe_malloc(output_num_dims * sizeof(size_t));
 	// copy dims before and after the reduced range
 	for (size_t i = 0; i < i_dim; i++) {
 		output_dims[i] = input->dims[i];
@@ -92,7 +92,7 @@ tnn_tensor_t *_tnn_mean(tnn_tensor_t *input, size_t i_dim, size_t num_dims) {
 		}
 	}
 
-	mean_context_t *ctx = tnn_safe_malloc(sizeof(mean_context_t));
+	mean_context_t *ctx = safe_malloc(sizeof(mean_context_t));
 	ctx->num_averaged = num_averaged;
 	ctx->outer_size = outer_size;
 	ctx->inner_size = inner_size;

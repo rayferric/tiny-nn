@@ -57,12 +57,12 @@ static void _tnn_toposort_helper(
 static tnn_tensor_t **_tnn_toposort(tnn_tensor_t *t, size_t *count) {
 	size_t visited_capacity = 64;
 	tnn_tensor_t **visited =
-	    tnn_safe_malloc(visited_capacity * sizeof(tnn_tensor_t *));
+	    safe_malloc(visited_capacity * sizeof(tnn_tensor_t *));
 	size_t visited_count = 0;
 
 	size_t result_capacity = 64;
 	tnn_tensor_t **result =
-	    tnn_safe_malloc(result_capacity * sizeof(tnn_tensor_t *));
+	    safe_malloc(result_capacity * sizeof(tnn_tensor_t *));
 	*count = 0;
 
 	_tnn_toposort_helper(
@@ -81,14 +81,14 @@ static tnn_tensor_t **_tnn_toposort(tnn_tensor_t *t, size_t *count) {
 
 void _tnn_zero_grad(const char *scope) {
 	// prepend active scope to prefix
-	char full_prefix[TNN_STATE_KEY_MAX_LEN];
-	_tnn_cat_keys(full_prefix, tnn_state.active_scope, scope);
+	char full_prefix[STATE_DICT_KEY_MAX_LEN];
+	cat_keys(full_prefix, global_state.active_scope, scope);
 
 	// go through param table and zero matching grads
-	for (size_t i = 0; i < TNN_STATE_DICT_SIZE; i++) {
-		tnn_state_entry_t *entry = tnn_state.state_dict[i];
+	for (size_t i = 0; i < STATE_DICT_HASHMAP_SIZE; i++) {
+		state_entry_t *entry = global_state.state_dict[i];
 		while (entry != NULL) {
-			if (_tnn_key_in_scope(entry->key, full_prefix) &&
+			if (key_in_scope(entry->key, full_prefix) &&
 			    entry->param->grad != NULL) {
 				size_t total_size = tnn_size(entry->param);
 				memset(entry->param->grad, 0, total_size * sizeof(float));
@@ -105,7 +105,7 @@ void tnn_backward(tnn_tensor_t *loss) {
 
 	// allocate initial loss grad wrt itself
 	if (loss->grad == NULL) {
-		loss->grad = tnn_safe_malloc(sizeof(float));
+		loss->grad = safe_malloc(sizeof(float));
 	}
 	loss->grad[0] = 1.0f;
 

@@ -55,17 +55,16 @@ int main() {
 	}
 
 	tnn_drop_state("adamw");
-	char *keys[1024];
+	tnn_save("cifar100_mlp.tnn");
+
+	char *keys[TNN_LIST_STATE_KEYS_MAX_LENGTH];
 	size_t num_keys = tnn_list_state_keys(keys);
 	printf("\n\nState keys:\n");
 	for (size_t i = 0; i < num_keys; i++) {
 		printf("- %s\n", keys[i]);
 	}
 
-	tnn_save("cifar100_mlp.tnn");
-
 	cifar10_destroy(&cifar);
-
 	tnn_terminate();
 
 	return 0;

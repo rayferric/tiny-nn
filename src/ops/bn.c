@@ -181,14 +181,14 @@ tnn_tensor_t *tnn_bn(tnn_tensor_t *input, float momentum, bool test) {
 	tnn_tensor_t *output = tnn_alloc(input->dims, input->num_dims);
 
 	// create context for backward pass
-	bn_context_t *ctx = tnn_safe_malloc(sizeof(bn_context_t));
+	bn_context_t *ctx = safe_malloc(sizeof(bn_context_t));
 	ctx->NHW = NHW;
 	ctx->C = C;
 	ctx->momentum = momentum;
 	ctx->test = test;
 	ctx->running_var = running_var->data;
 	if (!test) {
-		ctx->batch_var = tnn_safe_malloc(C * sizeof(float));
+		ctx->batch_var = safe_malloc(C * sizeof(float));
 	}
 
 	// forward pass: compute batch statistics and normalize
