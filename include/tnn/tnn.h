@@ -8,12 +8,67 @@
 
 #pragma clang diagnostic ignored "-Winitializer-overrides"
 
+typedef struct tnn_tensor tnn_tensor_t;
+typedef struct tnn_device tnn_device_t;
+
+///
+// LIBRARY LIFECYCLE
+// impl src/tnn.c
+///
+
+int tnn_init();
+void tnn_terminate();
+
+///
+// DEVICES
+// impl: src/devices.c
+///
+
+#define TNN_MAX_DEVICE_NAME_LENGTH 16
+#define TNN_MAX_DEVICE_DESC_LENGTH 128
+
+typedef struct {
+	// memory
+	void *(*buf_alloc)(tnn_device_t *, size_t);
+	void (*buf_free)(tnn_device_t *, void *);
+	void (*buf_copy)(tnn_device_t *, void *, const void *, size_t);
+	// memory transfer (NULL for devices that use system memory)
+	void (*buf_copy_to_host)(tnn_device_t *, void *, const void *, size_t);
+	void (*buf_copy_to_device)(tnn_device_t *, void *, const void *, size_t);
+
+	// operations
+	tnn_tensor_t *(*proj)(tnn_tensor_t *, size_t);
+	tnn_tensor_t *(*bias)(tnn_tensor_t *);
+	tnn_tensor_t *(*relu)(tnn_tensor_t *);
+	tnn_tensor_t *(*cross_entropy)(tnn_tensor_t *, tnn_tensor_t *);
+	tnn_tensor_t *(*conv)(tnn_tensor_t *, size_t, size_t, size_t, size_t);
+	tnn_tensor_t *(*bn)(tnn_tensor_t *, float, bool);
+	tnn_tensor_t *(*add)(tnn_tensor_t *, tnn_tensor_t *);
+	tnn_tensor_t *(*mean)(tnn_tensor_t *, size_t, size_t);
+	tnn_tensor_t *(*reshape)(tnn_tensor_t *, const size_t *, size_t);
+} _tnn_device_ops_t;
+
+struct tnn_device {
+	char name[TNN_MAX_DEVICE_NAME_LENGTH];
+	char desc[TNN_MAX_DEVICE_DESC_LENGTH];
+	_tnn_device_ops_t _ops;
+	void *_ctx;
+	bool _is_cpu;
+};
+
+size_t tnn_list_devices(tnn_device_t **out_devs);
+
+void tnn_set_default_device(const char *name);
+const char *tnn_get_default_device();
+
 ///
 // TENSOR STRUCTURE AND UTILS
 // impl: src/tensor.c
 ///
 
-typedef struct tnn_tensor {
+struct tnn_tensor {
+	tnn_device_t *device;
+
 	float *data;
 	float *grad;
 
@@ -30,7 +85,7 @@ typedef struct tnn_tensor {
 	void (*backward)(struct tnn_tensor *);
 	void *context; // pass more info from forward to backward
 	void (*free_context)(void *);
-} tnn_tensor_t;
+};
 
 tnn_tensor_t *tnn_alloc(const size_t *dims, size_t num_dims);
 
@@ -83,9 +138,6 @@ float tnn_item(tnn_tensor_t *t);
 // impl: src/state.c
 ///
 
-int tnn_init();
-void tnn_terminate();
-
 void tnn_push(const char *key_fmt, ...);
 void tnn_pop();
 #define TNN_SCOPE(key_fmt, ...)                                                \
@@ -96,6 +148,7 @@ void tnn_save(const char *filename);
 void tnn_load(const char *filename);
 
 size_t tnn_list_state_keys(char **out_keys);
+#define TNN_LIST_STATE_KEYS_MAX_LENGTH 4096
 tnn_tensor_t *tnn_get_state(const char *key);
 void tnn_set_state(const char *key, tnn_tensor_t *value);
 void tnn_drop_state(const char *key);
@@ -105,24 +158,9 @@ void tnn_drop_state(const char *key);
 // impl: src/ops/*.c
 ///
 
-tnn_tensor_t *
-tnn_reshape(tnn_tensor_t *input, const size_t *dims, size_t num_dims);
 tnn_tensor_t *tnn_proj(tnn_tensor_t *input, size_t dim_out);
 tnn_tensor_t *tnn_bias(tnn_tensor_t *input);
-// tnn_tensor_t *tnn_scale(tnn_tensor_t *input);
 tnn_tensor_t *tnn_relu(tnn_tensor_t *input);
-tnn_tensor_t *tnn_add(tnn_tensor_t *a, tnn_tensor_t *b);
-
-tnn_tensor_t *_tnn_mean(tnn_tensor_t *input, size_t i_dim, size_t num_dims);
-#define tnn_mean(...) OPTARG_FUNC(tnn_mean, __VA_ARGS__)
-#define tnn_mean_2(input, i_dim) _tnn_mean(input, i_dim, 1)
-#define tnn_mean_3(input, i_dim, num_dims) _tnn_mean(input, i_dim, num_dims)
-
-tnn_tensor_t *_tnn_bn(tnn_tensor_t *input, float momentum, bool test);
-#define tnn_bn(...) OPTARG_FUNC(tnn_bn, __VA_ARGS__)
-#define tnn_bn_1(input) _tnn_bn(input, 0.9, false)
-#define tnn_bn_2(input, momentum) _tnn_bn(input, momentum, false)
-#define tnn_bn_3(input, momentum, test) _tnn_bn(input, momentum, test)
 
 // - pred is raw logits 2D [batch_size, num_classes]
 // - target is one-hot encoded 2D [batch_size, num_classes]
@@ -144,6 +182,22 @@ tnn_tensor_t *_tnn_conv(
 	_tnn_conv(input, dim_out, kernel_size, stride, 1)
 #define tnn_conv_5(input, dim_out, kernel_size, stride, padding)               \
 	_tnn_conv(input, dim_out, kernel_size, stride, padding)
+
+tnn_tensor_t *_tnn_bn(tnn_tensor_t *input, float momentum, bool test);
+#define tnn_bn(...) OPTARG_FUNC(tnn_bn, __VA_ARGS__)
+#define tnn_bn_1(input) _tnn_bn(input, 0.9, false)
+#define tnn_bn_2(input, momentum) _tnn_bn(input, momentum, false)
+#define tnn_bn_3(input, momentum, test) _tnn_bn(input, momentum, test)
+
+tnn_tensor_t *tnn_add(tnn_tensor_t *a, tnn_tensor_t *b);
+
+tnn_tensor_t *_tnn_mean(tnn_tensor_t *input, size_t i_dim, size_t num_dims);
+#define tnn_mean(...) OPTARG_FUNC(tnn_mean, __VA_ARGS__)
+#define tnn_mean_2(input, i_dim) _tnn_mean(input, i_dim, 1)
+#define tnn_mean_3(input, i_dim, num_dims) _tnn_mean(input, i_dim, num_dims)
+
+tnn_tensor_t *
+tnn_reshape(tnn_tensor_t *input, const size_t *dims, size_t num_dims);
 
 ///
 // BACKPROP

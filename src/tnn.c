@@ -4,6 +4,7 @@
 #include <memory.h>
 #include <stdarg.h>
 
+#include "./devices.h"
 #include "./state.h"
 
 #define CHAIN_INIT(fn)                                                         \
@@ -13,10 +14,12 @@
 			return status;                                                     \
 	} while (0)
 int tnn_init() {
+	CHAIN_INIT(devices_init);
 	CHAIN_INIT(state_init);
 	return 0;
 }
 
 void tnn_terminate() {
 	state_terminate();
+	devices_terminate();
 }
