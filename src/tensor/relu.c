@@ -8,13 +8,11 @@ static void relu_backward(tnn_tensor_t *self) {
 	tnn_tensor_t *input = self->parents[0];
 
 	if (input->requires_grad) {
-		size_t total_size = tnn_size(input);
-		for (size_t i = 0; i < total_size; i++) {
-			// dself/dinput = 1 if input > 0, else 0
-			if (input->data[i] > 0.0f) {
-				input->grad[i] += self->grad[i];
-			}
-		}
+		// dout/din = 1 if in > 0, else 0
+		// in_grad += out_grad if out_data > 0 else 0
+		input->dev->_backend.relu_bw(
+		    input->dev, self->data, self->grad, input->grad, tnn_size(input)
+		);
 	}
 }
 
@@ -25,16 +23,15 @@ tnn_tensor_t *tnn_relu(tnn_tensor_t *input) {
 	tnn_tensor_t *output = tnn_alloc(input->dims, input->num_dims);
 
 	// output = max(0, input)
-	size_t total_size = tnn_size(input);
-	for (size_t i = 0; i < total_size; i++) {
-		output->data[i] = input->data[i] > 0.0f ? input->data[i] : 0.0f;
-	}
+	input->dev->_backend.relu_fw(
+	    input->dev, input->data, output->data, tnn_size(input)
+	);
 
 	output->requires_grad = input->requires_grad;
 	output->parents[0] = input;
 	output->num_parents = 1;
 	input->num_children++;
-	output->backward = relu_backward;
+	output->_backward = relu_backward;
 
 	return output;
 }

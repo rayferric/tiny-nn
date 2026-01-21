@@ -5,10 +5,10 @@
 
 #include <tnn/tnn.h>
 
-#include "./backend/cpu/cpu.h"
+#include "./cpu/cpu.h"
 #include "./devices.h"
 #ifdef ENABLE_VULKAN_BACKEND
-#include "./backend/vulkan/vulkan.h"
+#include "./vulkan/vulkan.h"
 #endif
 
 device_globals_t device_globals;
@@ -62,11 +62,11 @@ void tnn_set_default_device(const char *name) {
 		return;
 	}
 
-	tnn_device_t *devices[64];
+	tnn_device_t *devices[TNN_MAX_NUM_DEVICES];
 	size_t device_count = tnn_list_devices(devices);
 
 	for (size_t i = 0; i < device_count; i++) {
-		if (strcmp(devices[i]->name, name) == 0) {
+		if (strncmp(devices[i]->name, name, strlen(name)) == 0) {
 			device_globals.default_device = devices[i];
 			return;
 		}

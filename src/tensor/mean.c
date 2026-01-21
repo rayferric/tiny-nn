@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include <string.h>
 
-#include "../impl/malloc.h"
+#include "../util/safe_malloc.h"
 
 typedef struct {
 	size_t num_averaged, outer_size, inner_size;
@@ -23,24 +23,22 @@ static void mean_backward(tnn_tensor_t *self) {
 		return;
 	}
 
-	assert(self->context != NULL);
-	mean_context_t *ctx = (mean_context_t *)self->context;
-
-	// gradient coefficient - each input element contributed 1/n to the mean
-	float grad_coeff = 1.0f / (float)ctx->num_averaged;
+	assert(self->_ctx != NULL);
+	mean_context_t *ctx = (mean_context_t *)self->_ctx;
 
 	// broadcast gradient from output to input
-	for (size_t outer = 0; outer < ctx->outer_size; outer++) {
-		for (size_t reduced = 0; reduced < ctx->num_averaged; reduced++) {
-			for (size_t inner = 0; inner < ctx->inner_size; inner++) {
-				size_t input_idx =
-				    outer * (ctx->num_averaged * ctx->inner_size) +
-				    reduced * ctx->inner_size + inner;
-				size_t output_idx = outer * ctx->inner_size + inner;
-				input->grad[input_idx] += self->grad[output_idx] * grad_coeff;
-			}
-		}
-	}
+	input->dev->_backend.sum(
+	    input->dev,
+	    self->grad,
+	    input->grad,
+	    ctx->outer_size,
+	    ctx->num_averaged,
+	    ctx->inner_size,
+	    // gradient coefficient - each input element contributed 1/n to the mean
+	    1.0f / (float)ctx->num_averaged,
+	    false,
+	    true
+	);
 }
 
 tnn_tensor_t *_tnn_mean(tnn_tensor_t *input, size_t i_dim, size_t num_dims) {
@@ -79,18 +77,17 @@ tnn_tensor_t *_tnn_mean(tnn_tensor_t *input, size_t i_dim, size_t num_dims) {
 	}
 
 	// compute the mean
-	for (size_t outer = 0; outer < outer_size; outer++) {
-		for (size_t inner = 0; inner < inner_size; inner++) {
-			float sum = 0.0f;
-			for (size_t reduced = 0; reduced < num_averaged; reduced++) {
-				size_t input_idx = outer * (num_averaged * inner_size) +
-				                   reduced * inner_size + inner;
-				sum += input->data[input_idx];
-			}
-			size_t output_idx = outer * inner_size + inner;
-			output->data[output_idx] = sum / (float)num_averaged;
-		}
-	}
+	input->dev->_backend.sum(
+	    input->dev,
+	    input->data,
+	    output->data,
+	    outer_size,
+	    num_averaged,
+	    inner_size,
+	    1.0f / (float)num_averaged,
+	    false,
+	    false
+	);
 
 	mean_context_t *ctx = safe_malloc(sizeof(mean_context_t));
 	ctx->num_averaged = num_averaged;
@@ -101,9 +98,9 @@ tnn_tensor_t *_tnn_mean(tnn_tensor_t *input, size_t i_dim, size_t num_dims) {
 	output->num_parents = 1;
 	input->num_children++;
 	output->requires_grad = input->requires_grad;
-	output->backward = mean_backward;
-	output->context = ctx;
-	output->free_context = mean_free_context;
+	output->_backward = mean_backward;
+	output->_ctx = ctx;
+	output->_free_ctx = mean_free_context;
 
 	return output;
 }

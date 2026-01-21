@@ -57,7 +57,7 @@ int main() {
         // ... load x, y from dataset ...
 
         tnn_tensor_t *y_pred = mlp(x, 10, 128, 2);
-        tnn_tensor_t *loss = tnn_cross_entropy(y_pred, y);
+        tnn_tensor_t *loss = tnn_ce(y_pred, y);
 
         tnn_zero_grad();
         tnn_backward(loss);

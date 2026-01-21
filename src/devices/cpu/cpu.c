@@ -7,37 +7,7 @@
 
 #include "./cpu.h"
 
-void *cpu_buf_alloc(tnn_device_t *, size_t);
-void cpu_buf_free(tnn_device_t *, void *);
-void cpu_buf_copy(tnn_device_t *, void *, const void *, size_t);
-
-tnn_tensor_t *cpu_proj(tnn_tensor_t *, size_t);
-tnn_tensor_t *cpu_bias(tnn_tensor_t *);
-tnn_tensor_t *cpu_relu(tnn_tensor_t *);
-tnn_tensor_t *cpu_cross_entropy(tnn_tensor_t *, tnn_tensor_t *);
-tnn_tensor_t *cpu_conv(tnn_tensor_t *, size_t, size_t, size_t, size_t);
-tnn_tensor_t *cpu_bn(tnn_tensor_t *, float, bool);
-tnn_tensor_t *cpu_add(tnn_tensor_t *, tnn_tensor_t *);
-tnn_tensor_t *cpu_mean(tnn_tensor_t *, size_t, size_t);
-tnn_tensor_t *cpu_reshape(tnn_tensor_t *, const size_t *, size_t);
-
-_tnn_device_ops_t cpu_device_ops = {
-    .buf_alloc = cpu_buf_alloc,
-    .buf_free = cpu_buf_free,
-    .buf_copy = cpu_buf_copy,
-    .buf_copy_to_host = NULL,
-    .buf_copy_to_device = NULL,
-    //
-    .proj = cpu_proj,
-    .bias = cpu_bias,
-    .relu = cpu_relu,
-    .cross_entropy = cpu_cross_entropy,
-    .conv = cpu_conv,
-    .bn = cpu_bn,
-    .add = cpu_add,
-    .mean = cpu_mean,
-    .reshape = cpu_reshape,
-};
+#include "./backend/backend.h"
 
 typedef struct {
 	tnn_device_t device;
@@ -86,7 +56,7 @@ size_t cpu_list_devices(tnn_device_t **out_devs) {
 	snprintf(cpu_device->desc, TNN_MAX_DEVICE_DESC_LENGTH, "System CPU");
 #endif
 
-	cpu_device->_ops = cpu_device_ops;
+	cpu_device->_backend = backend;
 	cpu_device->_ctx = NULL;
 	cpu_device->_is_cpu = true;
 

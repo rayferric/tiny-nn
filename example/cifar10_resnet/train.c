@@ -35,7 +35,7 @@ int main() {
 			cifar10_make_batch(&cifar, i * batch_size, batch_size, &x, &y);
 
 			tnn_tensor_t *y_pred = resnet(x, CIFAR10_NUM_LABELS, 8, 1, 1);
-			tnn_tensor_t *loss = tnn_cross_entropy(y_pred, y);
+			tnn_tensor_t *loss = tnn_ce(y_pred, y);
 
 			tnn_zero_grad();
 			tnn_backward(loss);

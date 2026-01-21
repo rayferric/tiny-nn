@@ -1,3 +1,6 @@
+#include "./vulkan.h"
+
+#include <memory.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -6,33 +9,20 @@
 
 #include <tnn/tnn.h>
 
-#include "./vulkan.h"
+#include "../../util/safe_malloc.h"
+
+// #include "./backend/backend.h"
+#include "./impl.h"
 
 typedef struct {
 	VkInstance instance;
 	tnn_device_t *devices;
 	size_t num_devices;
 } vk_globals_t;
-vk_globals_t vk_globals = {0};
-
-void *vk_alloc(tnn_device_t *dev, size_t bytes) {
-	return 0;
-}
-void vk_free(tnn_device_t *dev, void *ptr) {}
-void vk_buf_copy_to_host(
-    tnn_device_t *dev, void *dst, void *src, size_t bytes
-) {}
-void vk_buf_copy_to_device(
-    tnn_device_t *dev, void *dst, void *src, size_t bytes
-) {}
-static _tnn_device_ops_t vk_device_ops = {
-    .buf_alloc = vk_alloc,
-    .buf_free = vk_free,
-    .buf_copy_to_host = vk_buf_copy_to_host,
-    .buf_copy_to_device = vk_buf_copy_to_device,
-};
+vk_globals_t vk_globals;
 
 int vk_init() {
+	memset(&vk_globals, 0, sizeof(vk_globals));
 	return 0;
 }
 void vk_terminate() {
@@ -41,6 +31,16 @@ void vk_terminate() {
 		vk_globals.instance = NULL;
 	}
 	if (vk_globals.devices) {
+		for (size_t i = 0; i < vk_globals.num_devices; i++) {
+			vk_device_context_t *ctx = vk_globals.devices[i]._ctx;
+			if (ctx) {
+				if (ctx->device) {
+					vkDestroyDevice(ctx->device, NULL);
+					vkDestroyCommandPool(ctx->device, ctx->command_pool, NULL);
+				}
+				free(ctx);
+			}
+		}
 		free(vk_globals.devices);
 		vk_globals.devices = NULL;
 		vk_globals.num_devices = 0;
@@ -67,24 +67,29 @@ size_t vk_list_devices(tnn_device_t **out_devs) {
 		}
 	}
 
+	if (vk_globals.devices) {
+		for (uint32_t i = 0; i < vk_globals.num_devices; i++) {
+			if (out_devs) {
+				out_devs[i] = &vk_globals.devices[i];
+			}
+		}
+		return vk_globals.num_devices;
+	}
+
 	uint32_t num_devices_u32 = 0;
 	vkEnumeratePhysicalDevices(vk_globals.instance, &num_devices_u32, NULL);
 	if (num_devices_u32 == 0) {
 		return 0;
 	}
+	if (num_devices_u32 > TNN_MAX_NUM_DEVICES) {
+		num_devices_u32 = TNN_MAX_NUM_DEVICES;
+	}
 
-	if (vk_globals.devices) {
-		free(vk_globals.devices);
-	}
-	vk_globals.devices = calloc(num_devices_u32, sizeof(tnn_device_t));
-	if (!vk_globals.devices) {
-		fprintf(stderr, "vk_list_devices: out of memory\n");
-		exit(1);
-	}
+	vk_globals.devices = safe_malloc(num_devices_u32 * sizeof(tnn_device_t));
 	vk_globals.num_devices = num_devices_u32;
 
 	VkPhysicalDevice *devices =
-	    malloc(num_devices_u32 * sizeof(VkPhysicalDevice));
+	    safe_malloc(num_devices_u32 * sizeof(VkPhysicalDevice));
 	vkEnumeratePhysicalDevices(vk_globals.instance, &num_devices_u32, devices);
 
 	for (uint32_t i = 0; i < num_devices_u32; i++) {
@@ -109,8 +114,12 @@ size_t vk_list_devices(tnn_device_t **out_devs) {
 		    "%s",
 		    props.deviceName
 		);
-		vk_globals.devices[i]._ops = vk_device_ops;
-		vk_globals.devices[i]._ctx = NULL;
+
+		vk_device_context_t *ctx = safe_malloc(sizeof(vk_device_context_t));
+		memset(ctx, 0, sizeof(vk_device_context_t));
+		ctx->physical_device = devices[i];
+		vk_globals.devices[i]._ctx = ctx;
+		// vk_globals.devices[i]._backend = backend;
 		vk_globals.devices[i]._is_cpu = false;
 
 		if (out_devs) {
@@ -119,5 +128,5 @@ size_t vk_list_devices(tnn_device_t **out_devs) {
 	}
 
 	free(devices);
-	return num_devices_u32;
+	return vk_globals.num_devices;
 }

@@ -4,8 +4,8 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "./impl/key_str_utils.h"
-#include "./impl/malloc.h"
+#include "./util/key_str_utils.h"
+#include "./util/safe_malloc.h"
 
 static void _tnn_toposort_helper(
     tnn_tensor_t *t,
@@ -79,6 +79,18 @@ static tnn_tensor_t **_tnn_toposort(tnn_tensor_t *t, size_t *count) {
 	return result;
 }
 
+static void tnn_init_fill_grad(tnn_tensor_t *t, float value) {
+	size_t total_size = tnn_size(t);
+	float *tmp_buf = (float *)safe_malloc(total_size * sizeof(float));
+	for (size_t i = 0; i < total_size; i++) {
+		tmp_buf[i] = value;
+	}
+	t->dev->_backend.buf_copy_to_device(
+	    t->dev, t->grad, tmp_buf, total_size * sizeof(float)
+	);
+	free(tmp_buf);
+}
+
 void _tnn_zero_grad(const char *scope) {
 	// prepend active scope to prefix
 	char full_prefix[STATE_DICT_KEY_MAX_LEN];
@@ -90,8 +102,7 @@ void _tnn_zero_grad(const char *scope) {
 		while (entry != NULL) {
 			if (key_in_scope(entry->key, full_prefix) &&
 			    entry->param->grad != NULL) {
-				size_t total_size = tnn_size(entry->param);
-				memset(entry->param->grad, 0, total_size * sizeof(float));
+				tnn_init_fill_grad(entry->param, 0.0f);
 			}
 
 			entry = entry->next;
@@ -105,30 +116,36 @@ void tnn_backward(tnn_tensor_t *loss) {
 
 	// allocate initial loss grad wrt itself
 	if (loss->grad == NULL) {
-		loss->grad = safe_malloc(sizeof(float));
+		loss->grad = loss->dev->_backend.buf_alloc(loss->dev, sizeof(float));
 	}
-	loss->grad[0] = 1.0f;
+	float one = 1.0f;
+	loss->dev->_backend.buf_copy_to_device(
+	    loss->dev, loss->grad, &one, sizeof(float)
+	);
 
 	// pass in reverse topological order
 	size_t num_nodes;
 	tnn_tensor_t **nodes = _tnn_toposort(loss, &num_nodes);
 	for (size_t i = num_nodes; i-- > 0;) {
 		tnn_tensor_t *node = nodes[i];
-		if (node->backward != NULL) {
+		if (node->_backward != NULL) {
 			// allocate parent grads if needed
 			for (size_t i_parent = 0; i_parent < node->num_parents;
 			     i_parent++) {
 				tnn_tensor_t *parent = node->parents[i_parent];
 				if (parent->requires_grad && parent->grad == NULL) {
 					size_t parent_size = tnn_size(parent);
-					parent->grad = calloc(parent_size, sizeof(float));
+					parent->grad = parent->dev->_backend.buf_alloc(
+					    parent->dev, parent_size * sizeof(float)
+					);
+					tnn_init_fill_grad(parent, 0.0f);
 				}
 			}
 
-			node->backward(node);
+			node->_backward(node);
 
 			// free self grad after backward for memory savings
-			free(node->grad);
+			node->dev->_backend.buf_free(node->dev, node->grad);
 			node->grad = NULL;
 		}
 	}

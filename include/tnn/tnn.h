@@ -24,34 +24,16 @@ void tnn_terminate();
 // impl: src/devices.c
 ///
 
+#define TNN_MAX_NUM_DEVICES 64
 #define TNN_MAX_DEVICE_NAME_LENGTH 16
 #define TNN_MAX_DEVICE_DESC_LENGTH 128
 
-typedef struct {
-	// memory
-	void *(*buf_alloc)(tnn_device_t *, size_t);
-	void (*buf_free)(tnn_device_t *, void *);
-	void (*buf_copy)(tnn_device_t *, void *, const void *, size_t);
-	// memory transfer (NULL for devices that use system memory)
-	void (*buf_copy_to_host)(tnn_device_t *, void *, const void *, size_t);
-	void (*buf_copy_to_device)(tnn_device_t *, void *, const void *, size_t);
-
-	// operations
-	tnn_tensor_t *(*proj)(tnn_tensor_t *, size_t);
-	tnn_tensor_t *(*bias)(tnn_tensor_t *);
-	tnn_tensor_t *(*relu)(tnn_tensor_t *);
-	tnn_tensor_t *(*cross_entropy)(tnn_tensor_t *, tnn_tensor_t *);
-	tnn_tensor_t *(*conv)(tnn_tensor_t *, size_t, size_t, size_t, size_t);
-	tnn_tensor_t *(*bn)(tnn_tensor_t *, float, bool);
-	tnn_tensor_t *(*add)(tnn_tensor_t *, tnn_tensor_t *);
-	tnn_tensor_t *(*mean)(tnn_tensor_t *, size_t, size_t);
-	tnn_tensor_t *(*reshape)(tnn_tensor_t *, const size_t *, size_t);
-} _tnn_device_ops_t;
+#include "_backend.h"
 
 struct tnn_device {
 	char name[TNN_MAX_DEVICE_NAME_LENGTH];
 	char desc[TNN_MAX_DEVICE_DESC_LENGTH];
-	_tnn_device_ops_t _ops;
+	_tnn_backend_t _backend;
 	void *_ctx;
 	bool _is_cpu;
 };
@@ -63,14 +45,14 @@ const char *tnn_get_default_device();
 
 ///
 // TENSOR STRUCTURE AND UTILS
-// impl: src/tensor.c
+// impl: src/tensor/*
 ///
 
 struct tnn_tensor {
-	tnn_device_t *device;
+	tnn_device_t *dev;
 
-	float *data;
-	float *grad;
+	void *data;
+	void *grad;
 
 	size_t *dims;
 	size_t num_dims;
@@ -82,9 +64,9 @@ struct tnn_tensor {
 	bool is_state;       // should not be freed by tnn_free()
 
 	bool requires_grad; // will get a gradient when child's backward() is called
-	void (*backward)(struct tnn_tensor *);
-	void *context; // pass more info from forward to backward
-	void (*free_context)(void *);
+	void (*_backward)(struct tnn_tensor *);
+	void *_ctx; // pass more info from forward to backward
+	void (*_free_ctx)(void *);
 };
 
 tnn_tensor_t *tnn_alloc(const size_t *dims, size_t num_dims);
@@ -117,46 +99,9 @@ size_t tnn_size(tnn_tensor_t *t);
 // 4)] = sum;
 // - instead of: output->data[((b * h_out + i) * w_out + j) * c_out + c] = sum;
 size_t tnn_index_at(tnn_tensor_t *t, size_t *indices, size_t num_indices);
-#define tnn_value_at(t, ...)                                                   \
-	t->data[tnn_index_at(                                                      \
-	    t,                                                                     \
-	    (size_t[]){__VA_ARGS__},                                               \
-	    sizeof((size_t[]){__VA_ARGS__}) / sizeof(size_t)                       \
-	)]
-#define tnn_grad_at(t, ...)                                                    \
-	t->grad[tnn_index_at(                                                      \
-	    t,                                                                     \
-	    (size_t[]){__VA_ARGS__},                                               \
-	    sizeof((size_t[]){__VA_ARGS__}) / sizeof(size_t)                       \
-	)]
 
 void tnn_print(tnn_tensor_t *t);
 float tnn_item(tnn_tensor_t *t);
-
-///
-// STATE DICT
-// impl: src/state.c
-///
-
-void tnn_push(const char *key_fmt, ...);
-void tnn_pop();
-#define TNN_SCOPE(key_fmt, ...)                                                \
-	for (int _tnn_once = (tnn_push(key_fmt, ##__VA_ARGS__), 1); _tnn_once;     \
-	     tnn_pop(), _tnn_once = 0)
-
-void tnn_save(const char *filename);
-void tnn_load(const char *filename);
-
-size_t tnn_list_state_keys(char **out_keys);
-#define TNN_LIST_STATE_KEYS_MAX_LENGTH 4096
-tnn_tensor_t *tnn_get_state(const char *key);
-void tnn_set_state(const char *key, tnn_tensor_t *value);
-void tnn_drop_state(const char *key);
-
-///
-// TENSOR OPERATIONS
-// impl: src/ops/*.c
-///
 
 tnn_tensor_t *tnn_proj(tnn_tensor_t *input, size_t dim_out);
 tnn_tensor_t *tnn_bias(tnn_tensor_t *input);
@@ -164,7 +109,7 @@ tnn_tensor_t *tnn_relu(tnn_tensor_t *input);
 
 // - pred is raw logits 2D [batch_size, num_classes]
 // - target is one-hot encoded 2D [batch_size, num_classes]
-tnn_tensor_t *tnn_cross_entropy(tnn_tensor_t *pred, tnn_tensor_t *target);
+tnn_tensor_t *tnn_ce(tnn_tensor_t *pred, tnn_tensor_t *target);
 
 // input dim is [..., height, width, in_channels]
 tnn_tensor_t *_tnn_conv(
@@ -198,6 +143,26 @@ tnn_tensor_t *_tnn_mean(tnn_tensor_t *input, size_t i_dim, size_t num_dims);
 
 tnn_tensor_t *
 tnn_reshape(tnn_tensor_t *input, const size_t *dims, size_t num_dims);
+
+///
+// STATE DICT
+// impl: src/state.c
+///
+
+void tnn_push(const char *key_fmt, ...);
+void tnn_pop();
+#define TNN_SCOPE(key_fmt, ...)                                                \
+	for (int _tnn_once = (tnn_push(key_fmt, ##__VA_ARGS__), 1); _tnn_once;     \
+	     tnn_pop(), _tnn_once = 0)
+
+void tnn_save(const char *filename);
+void tnn_load(const char *filename);
+
+size_t tnn_list_state_keys(char **out_keys);
+#define TNN_LIST_STATE_KEYS_MAX_LENGTH 4096
+tnn_tensor_t *tnn_get_state(const char *key);
+void tnn_set_state(const char *key, tnn_tensor_t *value);
+void tnn_drop_state(const char *key);
 
 ///
 // BACKPROP

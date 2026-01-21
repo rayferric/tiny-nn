@@ -4,7 +4,7 @@
 #include <memory.h>
 #include <stdarg.h>
 
-#include "./devices.h"
+#include "./devices/devices.h"
 #include "./state.h"
 
 #define CHAIN_INIT(fn)                                                         \

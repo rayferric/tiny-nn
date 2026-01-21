@@ -6,9 +6,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "./impl/key_str_utils.h"
-#include "./impl/malloc.h"
 #include "./state.h"
+#include "./util/key_str_utils.h"
+#include "./util/safe_malloc.h"
 
 global_state_t global_state;
 

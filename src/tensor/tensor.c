@@ -9,14 +9,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "./devices.h"
-#include "./impl/malloc.h"
+#include "../devices/devices.h"
+#include "../util/safe_malloc.h"
 
 tnn_tensor_t *
 alloc_tensor_on_device(const size_t *dims, size_t num_dims, tnn_device_t *dev) {
 	tnn_tensor_t *t = safe_malloc(sizeof(tnn_tensor_t));
 
-	t->device = dev;
+	t->dev = dev;
 
 	t->num_dims = num_dims;
 	if (num_dims > 0) {
@@ -27,7 +27,7 @@ alloc_tensor_on_device(const size_t *dims, size_t num_dims, tnn_device_t *dev) {
 	}
 
 	size_t total_size = tnn_size(t);
-	t->data = t->device->_ops.buf_alloc(t->device, total_size * sizeof(float));
+	t->data = t->dev->_backend.buf_alloc(t->dev, total_size * sizeof(float));
 	t->grad = NULL;
 
 	t->requires_grad = false;
@@ -35,10 +35,10 @@ alloc_tensor_on_device(const size_t *dims, size_t num_dims, tnn_device_t *dev) {
 
 	t->num_parents = 0;
 	t->num_children = 0;
-	t->backward = NULL;
+	t->_backward = NULL;
 
-	t->context = NULL;
-	t->free_context = NULL;
+	t->_ctx = NULL;
+	t->_free_ctx = NULL;
 
 	return t;
 }
@@ -88,23 +88,23 @@ void tnn_free(tnn_tensor_t *t) {
 	}
 
 	// free current tensor
-	t->device->_ops.buf_free(t->device, t->data);
+	t->dev->_backend.buf_free(t->dev, t->data);
 	if (t->grad) {
-		t->device->_ops.buf_free(t->device, t->grad);
+		t->dev->_backend.buf_free(t->dev, t->grad);
 	}
 	free(t->dims);
-	if (t->context != NULL && t->free_context != NULL) {
+	if (t->_ctx != NULL && t->_free_ctx != NULL) {
 		// (forward was executed without backward)
-		t->free_context(t->context);
+		t->_free_ctx(t->_ctx);
 	}
 	free(t);
 }
 
 tnn_tensor_t *tnn_detach(tnn_tensor_t *t) {
 	tnn_tensor_t *detached =
-	    alloc_tensor_on_device(t->dims, t->num_dims, t->device);
-	t->device->_ops.buf_copy(
-	    t->device, detached->data, t->data, tnn_size(t) * sizeof(float)
+	    alloc_tensor_on_device(t->dims, t->num_dims, t->dev);
+	t->dev->_backend.buf_copy(
+	    t->dev, detached->data, t->data, tnn_size(t) * sizeof(float)
 	);
 	return detached;
 }
@@ -116,8 +116,8 @@ tnn_tensor_t *tnn_detach_free(tnn_tensor_t *t) {
 }
 
 void tnn_init_from_memory(tnn_tensor_t *t, const float *data) {
-	t->device->_ops.buf_copy_to_device(
-	    t->device, t->data, data, tnn_size(t) * sizeof(float)
+	t->dev->_backend.buf_copy_to_device(
+	    t->dev, t->data, data, tnn_size(t) * sizeof(float)
 	);
 }
 
@@ -127,8 +127,8 @@ void tnn_init_fill(tnn_tensor_t *t, float value) {
 	for (size_t i = 0; i < total_size; i++) {
 		tmp_buf[i] = value;
 	}
-	t->device->_ops.buf_copy_to_device(
-	    t->device, t->data, tmp_buf, total_size * sizeof(float)
+	t->dev->_backend.buf_copy_to_device(
+	    t->dev, t->data, tmp_buf, total_size * sizeof(float)
 	);
 	free(tmp_buf);
 }
@@ -143,8 +143,8 @@ void tnn_init_randn(tnn_tensor_t *t) {
 		float z = sqrtf(-2.0f * logf(u1)) * cosf(2.0f * M_PI * u2);
 		tmp_buf[i] = z;
 	}
-	t->device->_ops.buf_copy_to_device(
-	    t->device, t->data, tmp_buf, total_size * sizeof(float)
+	t->dev->_backend.buf_copy_to_device(
+	    t->dev, t->data, tmp_buf, total_size * sizeof(float)
 	);
 	free(tmp_buf);
 }
@@ -180,17 +180,17 @@ void tnn_print(tnn_tensor_t *t) {
 	assert(t->num_dims <= 2 && "tnn_print: only 0D/1D/2D supported");
 
 	// verify cpu device
-	if (!t->device->_is_cpu) {
+	if (!t->dev->_is_cpu) {
 		fprintf(stderr, "tnn_print: tensor must be on cpu\n");
 		return;
 	}
 
 	if (t->num_dims == 0) {
-		printf("%.4f", t->data[0]);
+		printf("%.4f", ((float *)t->data)[0]);
 	} else if (t->num_dims == 1) {
 		printf("[");
 		for (size_t i = 0; i < t->dims[0]; i++) {
-			printf("%.4f", t->data[i]);
+			printf("%.4f", ((float *)t->data)[i]);
 			if (i < t->dims[0] - 1) {
 				printf(", ");
 			}
@@ -201,7 +201,7 @@ void tnn_print(tnn_tensor_t *t) {
 		for (size_t i = 0; i < t->dims[0]; i++) {
 			printf("  [");
 			for (size_t j = 0; j < t->dims[1]; j++) {
-				printf("%.4f", t->data[i * t->dims[1] + j]);
+				printf("%.4f", ((float *)t->data)[i * t->dims[1] + j]);
 				if (j < t->dims[1] - 1) {
 					printf(", ");
 				}
@@ -218,35 +218,6 @@ void tnn_print(tnn_tensor_t *t) {
 
 float tnn_item(tnn_tensor_t *t) {
 	float value;
-	t->device->_ops.buf_copy_to_host(t->device, &value, t->data, sizeof(float));
+	t->dev->_backend.buf_copy_to_host(t->dev, &value, t->data, sizeof(float));
 	return value;
 }
-
-// OPERATION ROUTING
-
-tnn_tensor_t *tnn_proj(tnn_tensor_t *input, size_t dim_out) {
-	//
-}
-
-// tnn_tensor_t *tnn_bias(tnn_tensor_t *input);
-
-// tnn_tensor_t *tnn_relu(tnn_tensor_t *input);
-
-// tnn_tensor_t *tnn_cross_entropy(tnn_tensor_t *pred, tnn_tensor_t *target);
-
-// tnn_tensor_t *_tnn_conv(
-//     tnn_tensor_t *input,
-//     size_t dim_out,
-//     size_t kernel_size,
-//     size_t stride,
-//     size_t padding
-// );
-
-// tnn_tensor_t *_tnn_bn(tnn_tensor_t *input, float momentum, bool test);
-
-// tnn_tensor_t *tnn_add(tnn_tensor_t *a, tnn_tensor_t *b);
-
-// tnn_tensor_t *_tnn_mean(tnn_tensor_t *input, size_t i_dim, size_t num_dims);
-
-// tnn_tensor_t *
-// tnn_reshape(tnn_tensor_t *input, const size_t *dims, size_t num_dims);

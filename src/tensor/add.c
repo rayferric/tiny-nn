@@ -11,21 +11,17 @@ static void add_backward(tnn_tensor_t *self) {
 	size_t total_size = tnn_size(self);
 
 	if (a->requires_grad) {
-		for (size_t i = 0; i < total_size; i++) {
-			// d(a+b)/da = 1
-			a->grad[i] += self->grad[i];
-		}
+		// d(a+b)/da = 1
+		a->dev->_backend.accum(a->dev, self->grad, a->grad, total_size);
 	}
 
 	if (b->requires_grad) {
-		for (size_t i = 0; i < total_size; i++) {
-			// d(a+b)/db = 1
-			b->grad[i] += self->grad[i];
-		}
+		// d(a+b)/db = 1
+		b->dev->_backend.accum(b->dev, self->grad, b->grad, total_size);
 	}
 }
 
-tnn_tensor_t *cpu_add(tnn_tensor_t *a, tnn_tensor_t *b) {
+tnn_tensor_t *tnn_add(tnn_tensor_t *a, tnn_tensor_t *b) {
 	assert(a != NULL);
 	assert(b != NULL);
 	assert(a->num_dims == b->num_dims);
@@ -39,10 +35,9 @@ tnn_tensor_t *cpu_add(tnn_tensor_t *a, tnn_tensor_t *b) {
 	tnn_tensor_t *output = tnn_alloc(a->dims, a->num_dims);
 
 	// output = a + b (element-wise)
-	size_t total_size = tnn_size(a);
-	for (size_t i = 0; i < total_size; i++) {
-		output->data[i] = a->data[i] + b->data[i];
-	}
+	a->dev->_backend.add(
+	    a->dev, a->data, b->data, output->data, 1, tnn_size(a)
+	);
 
 	output->requires_grad = a->requires_grad || b->requires_grad;
 	output->parents[0] = a;
@@ -50,7 +45,7 @@ tnn_tensor_t *cpu_add(tnn_tensor_t *a, tnn_tensor_t *b) {
 	output->num_parents = 2;
 	a->num_children++;
 	b->num_children++;
-	output->backward = add_backward;
+	output->_backward = add_backward;
 
 	return output;
 }

@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <string.h>
 
-#include "../impl/malloc.h"
+#include "../util/safe_malloc.h"
 
 typedef struct {
 	size_t *input_dims;
@@ -20,24 +20,19 @@ static void reshape_free_context(void *ctx) {
 static void reshape_backward(tnn_tensor_t *self) {
 	tnn_tensor_t *input = self->parents[0];
 
-	assert(self->context != NULL);
-	reshape_context_t *ctx = (reshape_context_t *)self->context;
+	assert(self->_ctx != NULL);
+	reshape_context_t *ctx = (reshape_context_t *)self->_ctx;
 
 	// copy gradient back to input with original shape
 	if (input->requires_grad) {
-		if (input->num_children > 1) {
-			size_t total_size = tnn_size(input);
-			for (size_t i = 0; i < total_size; i++) {
-				input->grad[i] += self->grad[i];
-			}
-		} else {
-			memcpy(input->grad, self->grad, tnn_size(input) * sizeof(float));
-		}
+		input->dev->_backend.accum(
+		    input->dev, self->grad, input->grad, tnn_size(input)
+		);
 	}
 }
 
 tnn_tensor_t *
-cpu_reshape(tnn_tensor_t *input, const size_t *dims, size_t num_dims) {
+tnn_reshape(tnn_tensor_t *input, const size_t *dims, size_t num_dims) {
 	assert(input != NULL);
 	assert(dims != NULL);
 	assert(num_dims > 0);
@@ -79,15 +74,17 @@ cpu_reshape(tnn_tensor_t *input, const size_t *dims, size_t num_dims) {
 	tnn_tensor_t *output = tnn_alloc(actual_dims, num_dims);
 	free(actual_dims);
 
-	memcpy(output->data, input->data, input_size * sizeof(float));
+	input->dev->_backend.buf_copy(
+	    input->dev, output->data, input->data, input_size * sizeof(float)
+	);
 
 	output->parents[0] = input;
 	output->num_parents = 1;
 	input->num_children++;
 	output->requires_grad = input->requires_grad;
-	output->backward = reshape_backward;
-	output->context = ctx;
-	output->free_context = reshape_free_context;
+	output->_backward = reshape_backward;
+	output->_ctx = ctx;
+	output->_free_ctx = reshape_free_context;
 
 	return output;
 }

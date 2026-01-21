@@ -23,7 +23,7 @@ int main() {
 	mlp_cfg_t mlp_cfg = {.dim_out = 10, .dim_hidden = 128, .num_hidden = 2};
 
 	const size_t num_epochs = 1;
-	const size_t num_steps = 50;
+	const size_t num_steps = 500;
 	const size_t batch_size = 100;
 	for (int i_epoch = 0; i_epoch < num_epochs; i_epoch++) {
 		for (int i = 0; i < num_steps; i++) {
@@ -33,7 +33,7 @@ int main() {
 			    mnist_batch_labels(&mnist, i * batch_size, batch_size);
 
 			tnn_tensor_t *y_pred = mlp(x, mlp_cfg);
-			tnn_tensor_t *loss = tnn_cross_entropy(y_pred, y);
+			tnn_tensor_t *loss = tnn_ce(y_pred, y);
 
 			tnn_zero_grad();
 			tnn_backward(loss);

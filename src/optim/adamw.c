@@ -1,13 +1,12 @@
 #include <tnn/tnn.h>
 
 #include <assert.h>
-#include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "./impl/key_str_utils.h"
+#include "./util/key_str_utils.h"
 
 void _tnn_adamw(tnn_adamw_cfg_t cfg) {
 	char full_scope[STATE_DICT_KEY_MAX_LEN];
@@ -59,35 +58,25 @@ void _tnn_adamw(tnn_adamw_cfg_t cfg) {
 					tnn_init_fill(m2, 0);
 				}
 				if (timestep_created) {
-					timestep->data[0] = 0.0f;
+					((float *)timestep->data)[0] = 0.0f;
 				}
 			}
 
-			// increment timestep
-			float t = timestep->data[0] + 1.0f;
-			timestep->data[0] = t;
-
-			// pre-compute bias correction factors
-			float bias1 = 1.0f - powf(cfg.b1, t);
-			float bias2 = 1.0f - powf(cfg.b2, t);
-
-			size_t param_size = tnn_size(param);
-			for (size_t j = 0; j < param_size; j++) {
-				float grad = param->grad[j];
-
-				// update moments
-				m1->data[j] = cfg.b1 * m1->data[j] + (1.0f - cfg.b1) * grad;
-				m2->data[j] =
-				    cfg.b2 * m2->data[j] + (1.0f - cfg.b2) * grad * grad;
-
-				// correct moment biases
-				float m_hat = m1->data[j] / bias1;
-				float v_hat = m2->data[j] / bias2;
-
-				// update
-				param->data[j] -= cfg.lr * (m_hat / (sqrtf(v_hat) + cfg.eps) +
-				                            cfg.wd * param->data[j]);
-			}
+			// call backend adamw function
+			param->dev->_backend.adamw(
+			    param->dev,
+			    param->data,
+			    param->grad,
+			    m1->data,
+			    m2->data,
+			    timestep->data,
+			    tnn_size(param),
+			    cfg.lr,
+			    cfg.b1,
+			    cfg.b2,
+			    cfg.eps,
+			    cfg.wd
+			);
 
 			entry = entry->next;
 		}
