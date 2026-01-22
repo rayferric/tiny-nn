@@ -1,11 +1,11 @@
 #version 450
 
-layout(binding = 0) readonly buffer LosArrBuf { float data[]; } lossArr;
-layout(binding = 1) writeonly buffer LossItemBuf { float data[]; } lossItem;
+layout(binding = 0) readonly buffer LosArrBuf { float data[]; } buf_LossArr;
+layout(binding = 1) writeonly buffer LossItemBuf { float data[]; } buf_LossItem;
 
 layout(push_constant) uniform PushConstants {
     uint n;
-} pc;
+} u_PC;
 
 layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
@@ -16,8 +16,8 @@ void main() {
     uint num_threads = gl_WorkGroupSize.x;
     
     float local_sum = 0.0;
-    for (uint i = thread_idx; i < pc.n; i += num_threads) {
-        local_sum += lossArr.data[i];
+    for (uint i = thread_idx; i < u_PC.n; i += num_threads) {
+        local_sum += buf_LossArr.data[i];
     }
     shared_sum[thread_idx] = local_sum;
     barrier();
@@ -30,6 +30,6 @@ void main() {
     }
     
     if (thread_idx == 0) {
-        lossItem.data[0] = shared_sum[0] / float(pc.n);
+        buf_LossItem.data[0] = shared_sum[0] / float(u_PC.n);
     }
 }

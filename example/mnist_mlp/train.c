@@ -35,7 +35,7 @@ int main() {
 			tnn_tensor_t *y =
 			    mnist_batch_labels(&mnist, i * batch_size, batch_size);
 
-			tnn_tensor_t *y_pred = tnn_proj(x, 10);
+			tnn_tensor_t *y_pred = mlp(x, mlp_cfg);
 			tnn_tensor_t *loss = tnn_ce(y_pred, y);
 
 			tnn_zero_grad();

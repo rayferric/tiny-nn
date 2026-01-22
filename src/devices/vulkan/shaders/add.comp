@@ -1,0 +1,19 @@
+#version 450
+
+layout(binding = 0) readonly buffer InputBufA { float data[]; } buf_A;
+layout(binding = 1) readonly buffer InputBufB { float data[]; } buf_B;
+layout(binding = 2) buffer OutputBuf { float data[]; } buf_Out;
+
+layout(push_constant) uniform PushConstants {
+    uint outer;
+    uint inner;
+} u_PC;
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+void main() {
+    uint i_outer = gl_GlobalInvocationID.x;
+    uint i_inner = gl_GlobalInvocationID.y;
+    if (i_outer >= u_PC.outer || i_inner >= u_PC.inner) return;
+    buf_Out.data[i_outer * u_PC.inner + i_inner] = buf_A.data[i_outer * u_PC.inner + i_inner] + buf_B.data[i_inner];
+}

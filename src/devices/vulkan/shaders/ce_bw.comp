@@ -1,14 +1,14 @@
 #version 450
 
-layout(binding = 0) readonly buffer Pred { float data[]; } pred;
-layout(binding = 1) readonly buffer Target { float data[]; } target;
-layout(binding = 2) readonly buffer OutGrad { float data[]; } out_grad;
-layout(binding = 3) buffer PredGrad { float data[]; } pred_grad;
+layout(binding = 0) readonly buffer PredBuf { float data[]; } buf_Pred;
+layout(binding = 1) readonly buffer TargetBuf { float data[]; } buf_Target;
+layout(binding = 2) readonly buffer OutGradBuf { float data[]; } buf_OutGrad;
+layout(binding = 3) buffer PredGradBuf { float data[]; } buf_PredGrad;
 
 layout(push_constant) uniform PushConstants {
     uint batch_size;
     uint num_classes;
-} pc;
+} u_PC;
 
 layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
@@ -20,17 +20,17 @@ void main() {
     uint thread_idx = gl_LocalInvocationID.x;
     uint num_threads = gl_WorkGroupSize.x;
     
-    if (batch_idx >= pc.batch_size) {
+    if (batch_idx >= u_PC.batch_size) {
         return;
     }
     
-    uint base_idx = batch_idx * pc.num_classes;
-    float scale = out_grad.data[0] / float(pc.batch_size);
+    uint base_idx = batch_idx * u_PC.num_classes;
+    float scale = buf_OutGrad.data[0] / float(u_PC.batch_size);
     
     // recompute max logit
     float local_max = -1e38;
-    for (uint i = thread_idx; i < pc.num_classes; i += num_threads) {
-        local_max = max(local_max, pred.data[base_idx + i]);
+    for (uint i = thread_idx; i < u_PC.num_classes; i += num_threads) {
+        local_max = max(local_max, buf_Pred.data[base_idx + i]);
     }
     shared_max_logit[thread_idx] = local_max;
     barrier();
@@ -46,8 +46,8 @@ void main() {
     
     // recompute sum exp
     float local_sum = 0.0;
-    for (uint i = thread_idx; i < pc.num_classes; i += num_threads) {
-        local_sum += exp(pred.data[base_idx + i] - max_logit);
+    for (uint i = thread_idx; i < u_PC.num_classes; i += num_threads) {
+        local_sum += exp(buf_Pred.data[base_idx + i] - max_logit);
     }
     shared_sum_exp[thread_idx] = local_sum;
     barrier();
@@ -61,10 +61,10 @@ void main() {
     float sum_exp = shared_sum_exp[0];
     
     // compute and write gradients
-    for (uint i = thread_idx; i < pc.num_classes; i += num_threads) {
-        float logit = pred.data[base_idx + i];
+    for (uint i = thread_idx; i < u_PC.num_classes; i += num_threads) {
+        float logit = buf_Pred.data[base_idx + i];
         float softmax = exp(logit - max_logit) / sum_exp;
-        float tgt = target.data[base_idx + i];
-        pred_grad.data[base_idx + i] += scale * (softmax - tgt);
+        float tgt = buf_Target.data[base_idx + i];
+        buf_PredGrad.data[base_idx + i] += scale * (softmax - tgt);
     }
 }

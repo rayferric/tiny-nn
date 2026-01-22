@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "../util/safe_malloc.h"
+#include "impl.h"
 
 typedef struct {
 	size_t *input_dims;
@@ -71,7 +72,8 @@ tnn_reshape(tnn_tensor_t *input, const size_t *dims, size_t num_dims) {
 	ctx->input_dims = safe_malloc(input->num_dims * sizeof(size_t));
 	memcpy(ctx->input_dims, input->dims, input->num_dims * sizeof(size_t));
 
-	tnn_tensor_t *output = tnn_alloc(actual_dims, num_dims);
+	tnn_tensor_t *output =
+	    alloc_tensor_on_device(actual_dims, num_dims, input->dev);
 	free(actual_dims);
 
 	input->dev->_backend.buf_copy(

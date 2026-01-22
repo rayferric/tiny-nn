@@ -1,0 +1,16 @@
+#version 450
+
+layout(binding = 0) readonly buffer InputBuf { float data[]; } buf_In;
+layout(binding = 1) buffer OutputBuf { float data[]; } buf_Out;
+
+layout(push_constant) uniform PushConstants {
+    uint size;
+} u_PC;
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= u_PC.size) return;
+    buf_Out.data[idx] += buf_In.data[idx];
+}

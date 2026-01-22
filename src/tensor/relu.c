@@ -4,6 +4,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "./impl.h"
+
 static void relu_backward(tnn_tensor_t *self) {
 	tnn_tensor_t *input = self->parents[0];
 
@@ -20,7 +22,8 @@ tnn_tensor_t *tnn_relu(tnn_tensor_t *input) {
 	assert(input != NULL);
 
 	// alloc output with same dims as input
-	tnn_tensor_t *output = tnn_alloc(input->dims, input->num_dims);
+	tnn_tensor_t *output =
+	    alloc_tensor_on_device(input->dims, input->num_dims, input->dev);
 
 	// output = max(0, input)
 	input->dev->_backend.relu_fw(

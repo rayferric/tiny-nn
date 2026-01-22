@@ -5,6 +5,8 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#include "./impl.h"
+
 static void bias_backward(tnn_tensor_t *self) {
 	tnn_tensor_t *input = self->parents[0];
 	tnn_tensor_t *bias = self->parents[1];
@@ -52,15 +54,17 @@ tnn_tensor_t *tnn_bias(tnn_tensor_t *input) {
 	// get bias parameter
 	size_t bias_dims[1] = {dim_feat};
 	bool bias_created = false;
-	tnn_tensor_t *bias =
-	    tnn_alloc_or_get_state(bias_dims, 1, "bias", &bias_created);
+	tnn_tensor_t *bias = alloc_or_get_state_tensor_on_device(
+	    bias_dims, 1, input->dev, "bias", &bias_created
+	);
 	bias->requires_grad = true;
 	if (bias_created) {
 		tnn_init_fill(bias, 0);
 	}
 
 	// alloc output with same dims as input
-	tnn_tensor_t *output = tnn_alloc(input->dims, input->num_dims);
+	tnn_tensor_t *output =
+	    alloc_tensor_on_device(input->dims, input->num_dims, input->dev);
 
 	// output = input + bias (broadcast over batch dimension)
 	input->dev->_backend.add(

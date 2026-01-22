@@ -1,10 +1,9 @@
 #version 450
-#extension GL_EXT_shader_atomic_float : require
 
-layout(binding = 0) buffer Param { float data[]; } param;
-layout(binding = 1) readonly buffer Grad { float data[]; } grad;
-layout(binding = 2) buffer M1 { float data[]; } m1;
-layout(binding = 3) buffer M2 { float data[]; } m2;
+layout(binding = 0) buffer ParamBuf { float data[]; } buf_Param;
+layout(binding = 1) readonly buffer GradBuf { float data[]; } buf_Grad;
+layout(binding = 2) buffer M1Buf { float data[]; } buf_M1;
+layout(binding = 3) buffer M2Buf { float data[]; } buf_M2;
 
 layout(push_constant) uniform PushConstants {
     uint param_size;
@@ -14,29 +13,29 @@ layout(push_constant) uniform PushConstants {
     float b2;
     float eps;
     float wd;
-} pc;
+} u_PC;
 
 layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
 void main() {
     uint idx = gl_GlobalInvocationID.x;
-    if (idx >= pc.param_size) {
+    if (idx >= u_PC.param_size) {
         return;
     }
     
-    float bias1 = 1.0 - pow(pc.b1, pc.t);
-    float bias2 = 1.0 - pow(pc.b2, pc.t);
+    float bias1 = 1.0 - pow(u_PC.b1, u_PC.t);
+    float bias2 = 1.0 - pow(u_PC.b2, u_PC.t);
     
-    float g = grad.data[idx];
+    float g = buf_Grad.data[idx];
     
-    float m1_new = pc.b1 * m1.data[idx] + (1.0 - pc.b1) * g;
-    float m2_new = pc.b2 * m2.data[idx] + (1.0 - pc.b2) * g * g;
+    float m1_new = u_PC.b1 * buf_M1.data[idx] + (1.0 - u_PC.b1) * g;
+    float m2_new = u_PC.b2 * buf_M2.data[idx] + (1.0 - u_PC.b2) * g * g;
     
-    m1.data[idx] = m1_new;
-    m2.data[idx] = m2_new;
+    buf_M1.data[idx] = m1_new;
+    buf_M2.data[idx] = m2_new;
     
     float m_hat = m1_new / bias1;
     float v_hat = m2_new / bias2;
     
-    param.data[idx] -= pc.lr * (m_hat / (sqrt(v_hat) + pc.eps) + pc.wd * param.data[idx]);
+    buf_Param.data[idx] -= u_PC.lr * (m_hat / (sqrt(v_hat) + u_PC.eps) + u_PC.wd * buf_Param.data[idx]);
 }

@@ -1,0 +1,74 @@
+#version 450
+
+layout(binding = 0) readonly buffer InputBuf { float data[]; } buf_In;
+layout(binding = 1) buffer OutputBuf { float data[]; } buf_Out;
+
+layout(push_constant) uniform PushConstants {
+    uint outer;
+    uint reduced;
+    uint inner;
+    float scale;
+    uint accum;
+    uint reverse;
+} u_PC;
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+shared float shared_data[256];
+
+void main() {
+    uint thread_idx = gl_LocalInvocationID.x;
+    uint workgroup_idx = gl_WorkGroupID.x;
+    uint num_threads = 256;
+
+    if (workgroup_idx >= u_PC.outer * u_PC.inner) return;
+
+    uint i_outer = workgroup_idx / u_PC.inner;
+    uint i_inner = workgroup_idx % u_PC.inner;
+    
+    if (u_PC.reverse == 0) {
+        // reduction: [outer, reduced, inner] -> [outer, inner]
+
+        // sum over reduced
+        float partial_sum = 0.0;
+        for (uint i_red = thread_idx; i_red < u_PC.reduced; i_red += num_threads) {
+            uint input_idx = (i_outer * u_PC.reduced + i_red) * u_PC.inner + i_inner;
+            partial_sum += buf_In.data[input_idx];
+        }
+        shared_data[thread_idx] = partial_sum;
+        barrier();
+        for (uint stride = num_threads / 2; stride > 0; stride /= 2) {
+            if (thread_idx < stride) {
+                shared_data[thread_idx] += shared_data[thread_idx + stride];
+            }
+            barrier();
+        }
+        float final_sum = shared_data[0];
+        
+        // thread #0 accumulates result
+        if (thread_idx == 0) {
+            float result = final_sum * u_PC.scale;
+            uint output_idx = workgroup_idx;
+            if (u_PC.accum != 0) {
+                buf_Out.data[output_idx] += result;
+            } else {
+                buf_Out.data[output_idx] = result;
+            }
+        }
+        
+    } else {
+        // broadcast: [outer, inner] -> [outer, reduced, inner]
+        
+        uint input_idx = workgroup_idx;
+        float val = buf_In.data[input_idx] * u_PC.scale;
+        
+        for (uint i_red = thread_idx; i_red < u_PC.reduced; i_red += num_threads) {
+            uint output_idx = (i_outer * u_PC.reduced + i_red) * u_PC.inner + i_inner;
+            if (u_PC.accum != 0) {
+                buf_Out.data[output_idx] += val;
+            } else {
+                buf_Out.data[output_idx] = val;
+            }
+        }
+    }
+}

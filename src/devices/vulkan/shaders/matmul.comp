@@ -1,8 +1,8 @@
 #version 450
 
-layout(binding = 0) readonly buffer BufA { float data[]; } a;
-layout(binding = 1) readonly buffer BufB { float data[]; } b;
-layout(binding = 2) buffer BufC { float data[]; } c;
+layout(binding = 0) readonly buffer BufA { float data[]; } buf_A;
+layout(binding = 1) readonly buffer BufB { float data[]; } buf_B;
+layout(binding = 2) buffer BufC { float data[]; } buf_C;
 
 layout(push_constant) uniform PushConstants {
     uint M;
@@ -11,7 +11,7 @@ layout(push_constant) uniform PushConstants {
     uint tpose_a;
     uint tpose_b;
     uint accum;
-} pc;
+} u_PC;
 
 // 16x16 = 256 threads per group (good for most gpus)
 layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
@@ -20,35 +20,35 @@ void main() {
     uint row = gl_GlobalInvocationID.y;
     uint col = gl_GlobalInvocationID.x;
     
-    if (row >= pc.M || col >= pc.N) {
+    if (row >= u_PC.M || col >= u_PC.N) {
         return;
     }
     
     float sum = 0.0;
     
-    for (uint i = 0; i < pc.K; i++) {
+    for (uint i = 0; i < u_PC.K; i++) {
         uint a_idx;
-        if (pc.tpose_a != 0) {
-            a_idx = i * pc.M + row;  // A is KxM, transposed to MxK
+        if (u_PC.tpose_a != 0) {
+            a_idx = i * u_PC.M + row;  // A is KxM, transposed to MxK
         } else {
-            a_idx = row * pc.K + i;  // A is MxK
+            a_idx = row * u_PC.K + i;  // A is MxK
         }
         
         uint b_idx;
-        if (pc.tpose_b != 0) {
-            b_idx = col * pc.K + i;  // B is NxK, transposed to KxN
+        if (u_PC.tpose_b != 0) {
+            b_idx = col * u_PC.K + i;  // B is NxK, transposed to KxN
         } else {
-            b_idx = i * pc.N + col;  // B is KxN
+            b_idx = i * u_PC.N + col;  // B is KxN
         }
         
-        sum += a.data[a_idx] * b.data[b_idx];
+        sum += buf_A.data[a_idx] * buf_B.data[b_idx];
     }
     
-    uint c_idx = row * pc.N + col;
+    uint c_idx = row * u_PC.N + col;
     
-    if (pc.accum != 0) {
-        c.data[c_idx] += sum;
+    if (u_PC.accum != 0) {
+        buf_C.data[c_idx] += sum;
     } else {
-        c.data[c_idx] = sum;
+        buf_C.data[c_idx] = sum;
     }
 }

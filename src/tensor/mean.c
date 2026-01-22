@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "../util/safe_malloc.h"
+#include "impl.h"
 
 typedef struct {
 	size_t num_averaged, outer_size, inner_size;
@@ -57,7 +58,8 @@ tnn_tensor_t *_tnn_mean(tnn_tensor_t *input, size_t i_dim, size_t num_dims) {
 		output_dims[i - num_dims] = input->dims[i];
 	}
 	// allocate output tensor
-	tnn_tensor_t *output = tnn_alloc(output_dims, output_num_dims);
+	tnn_tensor_t *output =
+	    alloc_tensor_on_device(output_dims, output_num_dims, input->dev);
 	free(output_dims);
 
 	// the number of elements to average over

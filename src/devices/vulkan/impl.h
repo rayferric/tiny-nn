@@ -22,12 +22,17 @@ typedef struct {
 typedef union {
 	struct {
 		vk_kernel_t matmul;
+		vk_kernel_t add;
+		vk_kernel_t accum;
+		vk_kernel_t sum;
+		vk_kernel_t relu_fw;
+		vk_kernel_t relu_bw;
 		vk_kernel_t ce_fw_1;
 		vk_kernel_t ce_fw_2;
 		vk_kernel_t ce_bw;
 		vk_kernel_t adamw;
 	};
-	vk_kernel_t array[5];
+	vk_kernel_t array[10];
 } vk_device_context_kernels_t;
 
 typedef struct {
