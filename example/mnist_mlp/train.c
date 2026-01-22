@@ -12,6 +12,9 @@ int main() {
 		return 1;
 	}
 
+	tnn_set_default_device("vulkan");
+	printf("Current device: %s\n", tnn_get_default_device());
+
 	mnist_t mnist;
 	mnist_create(&mnist);
 	mnist_load(
@@ -23,8 +26,8 @@ int main() {
 	mlp_cfg_t mlp_cfg = {.dim_out = 10, .dim_hidden = 128, .num_hidden = 2};
 
 	const size_t num_epochs = 1;
-	const size_t num_steps = 500;
-	const size_t batch_size = 100;
+	const size_t num_steps = 50;
+	const size_t batch_size = 1000;
 	for (int i_epoch = 0; i_epoch < num_epochs; i_epoch++) {
 		for (int i = 0; i < num_steps; i++) {
 			tnn_tensor_t *x =
@@ -32,7 +35,7 @@ int main() {
 			tnn_tensor_t *y =
 			    mnist_batch_labels(&mnist, i * batch_size, batch_size);
 
-			tnn_tensor_t *y_pred = mlp(x, mlp_cfg);
+			tnn_tensor_t *y_pred = tnn_proj(x, 10);
 			tnn_tensor_t *loss = tnn_ce(y_pred, y);
 
 			tnn_zero_grad();
@@ -42,8 +45,8 @@ int main() {
 			printf("\nStep %d/%zu: ", i + 1, num_steps);
 			printf("loss=");
 			tnn_print(loss);
-			float acc = accuracy(y_pred, y);
-			printf(", accuracy=%.2f%%", acc * 100.0f);
+			// float acc = accuracy(y_pred, y);
+			// printf(", accuracy=%.2f%%", acc * 100.0f);
 			fflush(stdout);
 
 			tnn_free(loss);

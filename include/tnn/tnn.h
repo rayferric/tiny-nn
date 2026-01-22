@@ -39,6 +39,7 @@ struct tnn_device {
 };
 
 size_t tnn_list_devices(tnn_device_t **out_devs);
+tnn_device_t *tnn_get_cpu();
 
 void tnn_set_default_device(const char *name);
 const char *tnn_get_default_device();
@@ -81,14 +82,21 @@ void tnn_free(tnn_tensor_t *t);
 
 // creates a copy of the tensor, belonging to a new computation graph. stops
 // backprop and recursive free
-tnn_tensor_t *tnn_detach(tnn_tensor_t *t);
+tnn_tensor_t *_tnn_detach(tnn_tensor_t *t, const char *new_device);
+#define tnn_detach(...) OPTARG_FUNC(tnn_detach, __VA_ARGS__)
+#define tnn_detach_1(t) _tnn_detach(t, NULL)
+#define tnn_detach_2(t, new_device) _tnn_detach(t, new_device)
 
 // free tensor t, return detached t (see: tnn_detach)
-tnn_tensor_t *tnn_detach_free(tnn_tensor_t *t);
+tnn_tensor_t *_tnn_detach_free(tnn_tensor_t *t, const char *new_device);
+#define tnn_detach_free(...) OPTARG_FUNC(tnn_detach_free, __VA_ARGS__)
+#define tnn_detach_free_1(t) _tnn_detach_free(t, NULL)
+#define tnn_detach_free_2(t, new_device) _tnn_detach_free(t, new_device)
 
 void tnn_init_from_memory(tnn_tensor_t *t, const float *data);
 void tnn_init_fill(tnn_tensor_t *t, float value);
 void tnn_init_randn(tnn_tensor_t *t);
+void tnn_init_xavier(tnn_tensor_t *t, size_t fan_in, size_t fan_out);
 
 size_t tnn_dim(tnn_tensor_t *t, int32_t i_dim);
 size_t tnn_size(tnn_tensor_t *t);

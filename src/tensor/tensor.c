@@ -12,36 +12,7 @@
 #include "../devices/devices.h"
 #include "../util/safe_malloc.h"
 
-tnn_tensor_t *
-alloc_tensor_on_device(const size_t *dims, size_t num_dims, tnn_device_t *dev) {
-	tnn_tensor_t *t = safe_malloc(sizeof(tnn_tensor_t));
-
-	t->dev = dev;
-
-	t->num_dims = num_dims;
-	if (num_dims > 0) {
-		t->dims = safe_malloc(num_dims * sizeof(size_t));
-		memcpy(t->dims, dims, num_dims * sizeof(size_t));
-	} else {
-		t->dims = NULL;
-	}
-
-	size_t total_size = tnn_size(t);
-	t->data = t->dev->_backend.buf_alloc(t->dev, total_size * sizeof(float));
-	t->grad = NULL;
-
-	t->requires_grad = false;
-	t->is_state = false;
-
-	t->num_parents = 0;
-	t->num_children = 0;
-	t->_backward = NULL;
-
-	t->_ctx = NULL;
-	t->_free_ctx = NULL;
-
-	return t;
-}
+#include "./impl.h"
 
 tnn_tensor_t *tnn_alloc(const size_t *dims, size_t num_dims) {
 	return alloc_tensor_on_device(
@@ -52,23 +23,9 @@ tnn_tensor_t *tnn_alloc(const size_t *dims, size_t num_dims) {
 tnn_tensor_t *tnn_alloc_or_get_state(
     const size_t *dims, size_t num_dims, const char *key, bool *allocated
 ) {
-	tnn_tensor_t *t = tnn_get_state(key);
-	if (t != NULL) {
-		if (allocated) {
-			*allocated = false;
-		}
-		return t;
-	}
-
-	t = tnn_alloc(dims, num_dims);
-	t->is_state = true;
-	tnn_set_state(key, t);
-
-	if (allocated) {
-		*allocated = true;
-	}
-
-	return t;
+	return alloc_or_get_state_tensor_on_device(
+	    dims, num_dims, device_globals.default_device, key, allocated
+	);
 }
 
 void tnn_free(tnn_tensor_t *t) {
@@ -100,17 +57,23 @@ void tnn_free(tnn_tensor_t *t) {
 	free(t);
 }
 
-tnn_tensor_t *tnn_detach(tnn_tensor_t *t) {
+tnn_tensor_t *_tnn_detach(tnn_tensor_t *t, const char *new_device) {
 	tnn_tensor_t *detached =
 	    alloc_tensor_on_device(t->dims, t->num_dims, t->dev);
 	t->dev->_backend.buf_copy(
 	    t->dev, detached->data, t->data, tnn_size(t) * sizeof(float)
 	);
+
+	if (new_device != NULL) {
+		tnn_device_t *dev = find_device(new_device);
+		ensure_tensor_on_device(detached, dev);
+	}
+
 	return detached;
 }
 
-tnn_tensor_t *tnn_detach_free(tnn_tensor_t *t) {
-	tnn_tensor_t *detached = tnn_detach(t);
+tnn_tensor_t *_tnn_detach_free(tnn_tensor_t *t, const char *new_device) {
+	tnn_tensor_t *detached = tnn_detach(t, new_device);
 	tnn_free(t);
 	return detached;
 }
@@ -149,6 +112,20 @@ void tnn_init_randn(tnn_tensor_t *t) {
 	free(tmp_buf);
 }
 
+void tnn_init_xavier(tnn_tensor_t *t, size_t fan_in, size_t fan_out) {
+	float limit = sqrtf(6.0f / (fan_in + fan_out));
+	size_t total_size = tnn_size(t);
+	float *tmp_buf = (float *)safe_malloc(total_size * sizeof(float));
+	for (size_t i = 0; i < total_size; i++) {
+		float u = (float)rand() / (float)RAND_MAX; // uniform [0,1]
+		tmp_buf[i] = u * 2.0f * limit - limit;     // uniform [-limit, limit]
+	}
+	t->dev->_backend.buf_copy_to_device(
+	    t->dev, t->data, tmp_buf, total_size * sizeof(float)
+	);
+	free(tmp_buf);
+}
+
 size_t tnn_dim(tnn_tensor_t *t, int32_t i_dim) {
 	// wrap negative indices
 	if (i_dim < 0) {
@@ -179,18 +156,26 @@ size_t tnn_index_at(tnn_tensor_t *t, size_t *indices, size_t num_indices) {
 void tnn_print(tnn_tensor_t *t) {
 	assert(t->num_dims <= 2 && "tnn_print: only 0D/1D/2D supported");
 
-	// verify cpu device
+	float *data_ptr = NULL;
+	float *tmp_data = NULL;
+
 	if (!t->dev->_is_cpu) {
-		fprintf(stderr, "tnn_print: tensor must be on cpu\n");
-		return;
+		size_t total_size = tnn_size(t);
+		tmp_data = (float *)malloc(total_size * sizeof(float));
+		t->dev->_backend.buf_copy_to_host(
+		    t->dev, tmp_data, t->data, total_size * sizeof(float)
+		);
+		data_ptr = tmp_data;
+	} else {
+		data_ptr = (float *)t->data;
 	}
 
 	if (t->num_dims == 0) {
-		printf("%.4f", ((float *)t->data)[0]);
+		printf("%.4f", data_ptr[0]);
 	} else if (t->num_dims == 1) {
 		printf("[");
 		for (size_t i = 0; i < t->dims[0]; i++) {
-			printf("%.4f", ((float *)t->data)[i]);
+			printf("%.4f", data_ptr[i]);
 			if (i < t->dims[0] - 1) {
 				printf(", ");
 			}
@@ -201,7 +186,7 @@ void tnn_print(tnn_tensor_t *t) {
 		for (size_t i = 0; i < t->dims[0]; i++) {
 			printf("  [");
 			for (size_t j = 0; j < t->dims[1]; j++) {
-				printf("%.4f", ((float *)t->data)[i * t->dims[1] + j]);
+				printf("%.4f", data_ptr[i * t->dims[1] + j]);
 				if (j < t->dims[1] - 1) {
 					printf(", ");
 				}
@@ -213,6 +198,10 @@ void tnn_print(tnn_tensor_t *t) {
 			printf("\n");
 		}
 		printf("]");
+	}
+
+	if (tmp_data) {
+		free(tmp_data);
 	}
 }
 

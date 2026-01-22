@@ -29,7 +29,7 @@ static void _tnn_toposort_helper(
 	if (*visited_count >= *visited_capacity) {
 		*visited_capacity *= 2;
 		*visited =
-		    realloc(*visited, *visited_capacity * sizeof(tnn_tensor_t *));
+		    safe_realloc(*visited, *visited_capacity * sizeof(tnn_tensor_t *));
 	}
 	(*visited)[(*visited_count)++] = t;
 
@@ -49,7 +49,8 @@ static void _tnn_toposort_helper(
 	// add current node to result after all parents
 	if (*result_count >= *result_capacity) {
 		*result_capacity *= 2;
-		*result = realloc(*result, *result_capacity * sizeof(tnn_tensor_t *));
+		*result =
+		    safe_realloc(*result, *result_capacity * sizeof(tnn_tensor_t *));
 	}
 	(*result)[(*result_count)++] = t;
 }
@@ -79,7 +80,7 @@ static tnn_tensor_t **_tnn_toposort(tnn_tensor_t *t, size_t *count) {
 	return result;
 }
 
-static void tnn_init_fill_grad(tnn_tensor_t *t, float value) {
+static void fill_grad(tnn_tensor_t *t, float value) {
 	size_t total_size = tnn_size(t);
 	float *tmp_buf = (float *)safe_malloc(total_size * sizeof(float));
 	for (size_t i = 0; i < total_size; i++) {
@@ -102,7 +103,7 @@ void _tnn_zero_grad(const char *scope) {
 		while (entry != NULL) {
 			if (key_in_scope(entry->key, full_prefix) &&
 			    entry->param->grad != NULL) {
-				tnn_init_fill_grad(entry->param, 0.0f);
+				fill_grad(entry->param, 0.0f);
 			}
 
 			entry = entry->next;
@@ -138,7 +139,7 @@ void tnn_backward(tnn_tensor_t *loss) {
 					parent->grad = parent->dev->_backend.buf_alloc(
 					    parent->dev, parent_size * sizeof(float)
 					);
-					tnn_init_fill_grad(parent, 0.0f);
+					fill_grad(parent, 0.0f);
 				}
 			}
 

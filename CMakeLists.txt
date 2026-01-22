@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 project(tnn LANGUAGES C)
 
 option(ENABLE_VULKAN_BACKEND "Enable Vulkan backend support" ON)
+option(ENABLE_VULKAN_VALIDATION "Enable Vulkan validation layers" ON)
 option(BUILD_EXAMPLES "Build example executables" ON)
 file(GLOB_RECURSE TARGET_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/include/*.h"
@@ -23,11 +24,55 @@ target_sources(tnn PRIVATE ${CPU_SOURCES})
 
 if(ENABLE_VULKAN_BACKEND)
     message(STATUS "Vulkan backend enabled")
-    find_package(Vulkan REQUIRED)
+    
+    # add vulkan backend sources
     file(GLOB_RECURSE VULKAN_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/vulkan/*")
     target_sources(tnn PRIVATE ${VULKAN_SOURCES})
-    target_link_libraries(tnn PRIVATE Vulkan::Vulkan)
     target_compile_definitions(tnn PRIVATE ENABLE_VULKAN_BACKEND)
+    
+    # link vulkan 
+    find_package(Vulkan REQUIRED)
+    target_link_libraries(tnn PRIVATE Vulkan::Vulkan)
+
+    # enable validation layers
+    if(ENABLE_VULKAN_VALIDATION)
+        message(STATUS "Vulkan validation layers enabled")
+        target_compile_definitions(tnn PRIVATE ENABLE_VULKAN_VALIDATION)
+    endif()
+
+    # compile shaders
+
+    find_program(GLSLANG glslangValidator REQUIRED)
+    find_program(XXD xxd REQUIRED)
+    file(GLOB SHADER_SOURCES "${CMAKE_SOURCE_DIR}/src/devices/vulkan/shaders/*.comp")
+
+    set(GENERATED_HEADERS_DIR "${CMAKE_BINARY_DIR}/generated/vulkan_shaders")
+    file(MAKE_DIRECTORY ${GENERATED_HEADERS_DIR})
+
+    foreach(SHADER ${SHADER_SOURCES})
+        get_filename_component(SHADER_NAME ${SHADER} NAME_WE)
+        
+        set(SPV_FILE "${GENERATED_HEADERS_DIR}/${SHADER_NAME}.spv")
+        set(HEADER_FILE "${GENERATED_HEADERS_DIR}/${SHADER_NAME}.h")
+        
+        add_custom_command(
+            OUTPUT ${SPV_FILE}
+            COMMAND ${GLSLANG} -V ${SHADER} -o ${SPV_FILE}
+            DEPENDS ${SHADER}
+        )
+        
+        add_custom_command(
+            OUTPUT ${HEADER_FILE}
+            COMMAND ${XXD} -i ${SHADER_NAME}.spv > ${HEADER_FILE}
+            DEPENDS ${SPV_FILE}
+            WORKING_DIRECTORY ${GENERATED_HEADERS_DIR}
+        )
+        
+        list(APPEND GENERATED_SHADER_HEADERS ${HEADER_FILE})
+    endforeach()
+
+    target_include_directories(tnn PRIVATE "${CMAKE_BINARY_DIR}/generated")
+    target_sources(tnn PRIVATE ${GENERATED_SHADER_HEADERS})
 endif()
 
 if(BUILD_EXAMPLES)

@@ -37,16 +37,6 @@ buf_copy_to_host(tnn_device_t *dev, void *dst, const void *src, size_t bytes) {
 
 #include "./matmul.h"
 
-static void
-xavier(tnn_device_t *dev, void *out, size_t sz, size_t fan_in, size_t fan_out) {
-	float limit = sqrtf(6.0f / (fan_in + fan_out));
-	float *fdata = (float *)out;
-	for (size_t i = 0; i < sz; i++) {
-		float u = (float)rand() / (float)RAND_MAX; // uniform [0,1]
-		fdata[i] = u * 2.0f * limit - limit;       // uniform [-limit, limit]
-	}
-}
-
 // out[outer, inner] = a[outer, inner] + b[inner]
 static void
 add(tnn_device_t *dev,
@@ -151,24 +141,20 @@ static void relu_bw(
 #include "./ce.h"
 #include "./conv.h"
 
-void adamw(
+static void adamw(
     tnn_device_t *dev,
     void *param_data,
     void *param_grad,
     void *m1_data,
     void *m2_data,
-    void *timestep_data,
     size_t param_size,
+    float t,
     float lr,
     float b1,
     float b2,
     float eps,
     float wd
 ) {
-	// increment timestep
-	float t = ((float *)timestep_data)[0] + 1.0f;
-	((float *)timestep_data)[0] = t;
-
 	// pre-compute bias correction factors
 	float bias1 = 1.0f - powf(b1, t);
 	float bias2 = 1.0f - powf(b2, t);
@@ -198,7 +184,6 @@ static _tnn_backend_t backend = {
     .buf_copy_to_host = buf_copy_to_host,
     .buf_copy_to_device = buf_copy_to_device,
     .matmul = matmul,
-    .xavier = xavier,
     .add = add,
     .accum = accum,
     .sum = sum,

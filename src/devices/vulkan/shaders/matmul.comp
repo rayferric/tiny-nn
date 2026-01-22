@@ -1,0 +1,54 @@
+#version 450
+
+layout(binding = 0) readonly buffer BufA { float data[]; } a;
+layout(binding = 1) readonly buffer BufB { float data[]; } b;
+layout(binding = 2) buffer BufC { float data[]; } c;
+
+layout(push_constant) uniform PushConstants {
+    uint M;
+    uint K;
+    uint N;
+    uint tpose_a;
+    uint tpose_b;
+    uint accum;
+} pc;
+
+// 16x16 = 256 threads per group (good for most gpus)
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+void main() {
+    uint row = gl_GlobalInvocationID.y;
+    uint col = gl_GlobalInvocationID.x;
+    
+    if (row >= pc.M || col >= pc.N) {
+        return;
+    }
+    
+    float sum = 0.0;
+    
+    for (uint i = 0; i < pc.K; i++) {
+        uint a_idx;
+        if (pc.tpose_a != 0) {
+            a_idx = i * pc.M + row;  // A is KxM, transposed to MxK
+        } else {
+            a_idx = row * pc.K + i;  // A is MxK
+        }
+        
+        uint b_idx;
+        if (pc.tpose_b != 0) {
+            b_idx = col * pc.K + i;  // B is NxK, transposed to KxN
+        } else {
+            b_idx = i * pc.N + col;  // B is KxN
+        }
+        
+        sum += a.data[a_idx] * b.data[b_idx];
+    }
+    
+    uint c_idx = row * pc.N + col;
+    
+    if (pc.accum != 0) {
+        c.data[c_idx] += sum;
+    } else {
+        c.data[c_idx] = sum;
+    }
+}

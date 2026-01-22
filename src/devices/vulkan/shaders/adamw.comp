@@ -1,0 +1,42 @@
+#version 450
+#extension GL_EXT_shader_atomic_float : require
+
+layout(binding = 0) buffer Param { float data[]; } param;
+layout(binding = 1) readonly buffer Grad { float data[]; } grad;
+layout(binding = 2) buffer M1 { float data[]; } m1;
+layout(binding = 3) buffer M2 { float data[]; } m2;
+
+layout(push_constant) uniform PushConstants {
+    uint param_size;
+    float t;
+    float lr;
+    float b1;
+    float b2;
+    float eps;
+    float wd;
+} pc;
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= pc.param_size) {
+        return;
+    }
+    
+    float bias1 = 1.0 - pow(pc.b1, pc.t);
+    float bias2 = 1.0 - pow(pc.b2, pc.t);
+    
+    float g = grad.data[idx];
+    
+    float m1_new = pc.b1 * m1.data[idx] + (1.0 - pc.b1) * g;
+    float m2_new = pc.b2 * m2.data[idx] + (1.0 - pc.b2) * g * g;
+    
+    m1.data[idx] = m1_new;
+    m2.data[idx] = m2_new;
+    
+    float m_hat = m1_new / bias1;
+    float v_hat = m2_new / bias2;
+    
+    param.data[idx] -= pc.lr * (m_hat / (sqrt(v_hat) + pc.eps) + pc.wd * param.data[idx]);
+}

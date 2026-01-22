@@ -1,0 +1,88 @@
+#version 450
+#extension GL_EXT_shader_atomic_float : require
+
+layout(binding = 0) readonly buffer Pred { float data[]; } pred;
+layout(binding = 1) readonly buffer Target { float data[]; } target;
+layout(binding = 2) buffer Loss { float data[]; } loss;
+
+layout(push_constant) uniform PushConstants {
+    uint batch_size;
+    uint num_classes;
+} pc;
+
+// 256 threads per group (good for most gpus)
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+// shared memory for reductions within workgroup
+shared float shared_max_logit[256];
+shared float shared_sum_exp[256];
+shared float shared_total_loss[256];
+
+void main() {
+    uint batch_idx = gl_WorkGroupID.x;
+    uint thread_idx = gl_LocalInvocationID.x;
+    uint num_threads = gl_WorkGroupSize.x; // = 256
+    
+    if (batch_idx >= pc.batch_size) {
+        return;
+    }
+    uint base_idx = batch_idx * pc.num_classes;
+    
+    // softmax part 1: find max logit
+    float local_max = -1e38;
+    for (uint i = thread_idx; i < pc.num_classes; i += num_threads) {
+        float logit = pred.data[base_idx + i];
+        local_max = max(local_max, logit);
+    }
+    shared_max_logit[thread_idx] = local_max;
+    barrier();
+    // sum reduction
+    for (uint stride = num_threads / 2; stride > 0; stride /= 2) {
+        if (thread_idx < stride) {
+            shared_max_logit[thread_idx] = max(shared_max_logit[thread_idx], shared_max_logit[thread_idx + stride]);
+        }
+        barrier();
+    }
+    float max_logit = shared_max_logit[0];
+    
+    // softmax part 2: sum of exp
+    float local_sum = 0.0;
+    for (uint i = thread_idx; i < pc.num_classes; i += num_threads) {
+        float logit = pred.data[base_idx + i];
+        local_sum += exp(logit - max_logit);
+    }
+    shared_sum_exp[thread_idx] = local_sum;
+    barrier();
+    // sum reduction
+    for (uint stride = num_threads / 2; stride > 0; stride /= 2) {
+        if (thread_idx < stride) {
+            shared_sum_exp[thread_idx] += shared_sum_exp[thread_idx + stride];
+        }
+        barrier();
+    }
+    float sum_exp = shared_sum_exp[0];
+    float log_sum_exp = log(sum_exp);
+    
+    // final part: total per-class loss
+    float local_loss = 0.0;
+    for (uint i = thread_idx; i < pc.num_classes; i += num_threads) {
+        float logit = pred.data[base_idx + i];
+        float tgt = target.data[base_idx + i];
+        float log_softmax = (logit - max_logit) - log_sum_exp;
+        local_loss -= tgt * log_softmax;
+    }
+    shared_total_loss[thread_idx] = local_loss;  // reuse shared memory
+    barrier();
+    // sum reduction
+    for (uint stride = num_threads / 2; stride > 0; stride /= 2) {
+        if (thread_idx < stride) {
+            shared_total_loss[thread_idx] += shared_total_loss[thread_idx + stride];
+        }
+        barrier();
+    }
+    
+    // thread #0 writes reduction result to storage buffer
+    if (thread_idx == 0) {
+        loss.data[batch_idx] = shared_total_loss[0];
+    }
+}

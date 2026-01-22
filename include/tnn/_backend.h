@@ -37,10 +37,6 @@ typedef struct {
 	    bool accum
 	);
 
-	void (*xavier)(
-	    tnn_device_t *dev, void *out, size_t sz, size_t fan_in, size_t fan_out
-	);
-
 	// a should have outer * inner elements
 	// b is broadcasted from inner to outer * inner
 	void (*add)(
@@ -200,8 +196,8 @@ typedef struct {
 	    void *param_grad,
 	    void *m1_data,
 	    void *m2_data,
-	    void *timestep_data,
 	    size_t param_size,
+	    float t,
 	    float lr,
 	    float b1,
 	    float b2,

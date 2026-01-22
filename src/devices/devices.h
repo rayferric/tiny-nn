@@ -4,11 +4,12 @@
 
 typedef struct {
 	tnn_device_t *default_device;
+	tnn_device_t **devices_cache;
+	size_t num_devices;
 } device_globals_t;
 extern device_globals_t device_globals;
 
 int devices_init();
 void devices_terminate();
 
-void tnn_set_default_device(const char *name);
-const char *tnn_get_default_device();
+tnn_device_t *find_device(const char *name);

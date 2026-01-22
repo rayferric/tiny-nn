@@ -111,7 +111,12 @@ void tnn_save(const char *filename) {
 			for (uint8_t i_dim = 0; i_dim < t->num_dims; i_dim++) {
 				total_size *= t->dims[i_dim];
 			}
-			fwrite(t->data, sizeof(float), total_size, fp);
+			float *tmp_buf = (float *)safe_malloc(total_size * sizeof(float));
+			t->dev->_backend.buf_copy_to_host(
+			    t->dev, tmp_buf, t->data, total_size * sizeof(float)
+			);
+			fwrite(tmp_buf, sizeof(float), total_size, fp);
+			free(tmp_buf);
 
 			entry = entry->next;
 		}
@@ -164,7 +169,13 @@ void tnn_load(const char *filename) {
 		tnn_tensor_t *t = tnn_alloc(dims, num_dims);
 		t->is_state = true;
 
-		fread(t->data, sizeof(float), total_size, fp);
+		// fread to device
+		float *tmp_buf = (float *)safe_malloc(total_size * sizeof(float));
+		fread(tmp_buf, sizeof(float), total_size, fp);
+		t->dev->_backend.buf_copy_to_device(
+		    t->dev, t->data, tmp_buf, total_size * sizeof(float)
+		);
+		free(tmp_buf);
 
 		free(dims);
 

@@ -115,10 +115,8 @@ tnn_tensor_t *_tnn_conv(
 	    tnn_alloc_or_get_state(weight_dims, 4, "conv", &weight_created);
 	weight->requires_grad = true;
 	if (weight_created) {
-		input->dev->_backend.xavier(
-		    input->dev,
-		    weight->data,
-		    tnn_size(weight),
+		tnn_init_xavier(
+		    weight,
 		    kernel_size * kernel_size * dim_in,
 		    kernel_size * kernel_size * dim_out
 		);

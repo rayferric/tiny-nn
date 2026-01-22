@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "../tensor/impl.h" // for alloc func
 #include "./util/key_str_utils.h"
 
 void _tnn_adamw(tnn_adamw_cfg_t cfg) {
@@ -39,15 +40,22 @@ void _tnn_adamw(tnn_adamw_cfg_t cfg) {
 				bool m1_created = false;
 				bool m2_created = false;
 				bool timestep_created = false;
-				m1 = tnn_alloc_or_get_state(
-				    param->dims, param->num_dims, m1_rel_key, &m1_created
+				m1 = alloc_or_get_state_tensor_on_device(
+				    param->dims,
+				    param->num_dims,
+				    param->dev,
+				    m1_rel_key,
+				    &m1_created
 				);
-				m2 = tnn_alloc_or_get_state(
-				    param->dims, param->num_dims, m2_rel_key, &m2_created
+				m2 = alloc_or_get_state_tensor_on_device(
+				    param->dims,
+				    param->num_dims,
+				    param->dev,
+				    m2_rel_key,
+				    &m2_created
 				);
-				size_t timestep_dims[] = {1};
-				timestep = tnn_alloc_or_get_state(
-				    timestep_dims, 1, timestep_rel_key, &timestep_created
+				timestep = alloc_or_get_state_tensor_on_device(
+				    NULL, 0, tnn_get_cpu(), timestep_rel_key, &timestep_created
 				);
 
 				// zero init if newly created
@@ -58,19 +66,22 @@ void _tnn_adamw(tnn_adamw_cfg_t cfg) {
 					tnn_init_fill(m2, 0);
 				}
 				if (timestep_created) {
-					((float *)timestep->data)[0] = 0.0f;
+					tnn_init_fill(timestep, 0);
 				}
 			}
 
-			// call backend adamw function
+			// increment timestep (always on cpu)
+			float t = ((float *)timestep->data)[0] + 1.0f;
+			((float *)timestep->data)[0] = t;
+
 			param->dev->_backend.adamw(
 			    param->dev,
 			    param->data,
 			    param->grad,
 			    m1->data,
 			    m2->data,
-			    timestep->data,
 			    tnn_size(param),
+			    t,
 			    cfg.lr,
 			    cfg.b1,
 			    cfg.b2,
