@@ -91,7 +91,7 @@ tnn_device_t *tnn_get_cpu() {
 	return device_globals.devices_cache[0];
 }
 
-tnn_device_t *find_device(const char *name) {
+tnn_device_t *tnn_find_device(const char *name) {
 	tnn_device_t *devices[TNN_MAX_NUM_DEVICES];
 	size_t device_count = tnn_list_devices(devices);
 
@@ -109,10 +109,10 @@ tnn_device_t *find_device(const char *name) {
 	return devices[0];
 }
 
-void tnn_set_default_device(const char *name) {
-	device_globals.default_device = find_device(name);
+void tnn_set_default_device(tnn_device_t *device) {
+	device_globals.default_device = device;
 }
 
-const char *tnn_get_default_device() {
-	return device_globals.default_device->name;
+tnn_device_t *tnn_get_default_device() {
+	return device_globals.default_device;
 }

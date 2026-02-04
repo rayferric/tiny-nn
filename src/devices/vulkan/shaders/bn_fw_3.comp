@@ -1,0 +1,50 @@
+#version 450
+
+// bn_fw 3rd pass: normalize input using mean and variance, update running stats
+
+layout(binding = 0) readonly buffer InputBuf { float data[]; } buf_Input;
+layout(binding = 1) writeonly buffer OutputBuf { float data[]; } buf_Output;
+layout(binding = 2) readonly buffer MeanBuf { float data[]; } buf_Mean;
+layout(binding = 3) readonly buffer VarBuf { float data[]; } buf_Var;
+layout(binding = 4) buffer RunningMeanBuf { float data[]; } buf_RunningMean;
+layout(binding = 5) buffer RunningVarBuf { float data[]; } buf_RunningVar;
+
+layout(push_constant) uniform PushConstants {
+    uint NHW;
+    uint C;
+    float momentum;
+    uint test; // 0 = train, 1 = test
+} u_PC;
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+void main() {
+    uint c = gl_WorkGroupID.x;
+    uint thread_idx = gl_LocalInvocationID.x;
+    uint num_threads = gl_WorkGroupSize.x;
+    
+    if (c >= u_PC.C) {
+        return;
+    }
+    
+    float mean, var;
+    
+    if (u_PC.test != 0) {
+        mean = buf_RunningMean.data[c];
+        var = buf_RunningVar.data[c];
+    } else {
+        mean = buf_Mean.data[c];
+        var = buf_Var.data[c];
+        
+        if (thread_idx == 0) {
+            buf_RunningMean.data[c] = u_PC.momentum * buf_RunningMean.data[c] + (1.0 - u_PC.momentum) * mean;
+            buf_RunningVar.data[c] = u_PC.momentum * buf_RunningVar.data[c] + (1.0 - u_PC.momentum) * var;
+        }
+    }
+    
+    // Normalize
+    float std_inv = 1.0 / sqrt(var + 1e-5);
+    for (uint idx = c + thread_idx * u_PC.C; idx < u_PC.NHW * u_PC.C; idx += num_threads * u_PC.C) {
+        buf_Output.data[idx] = (buf_Input.data[idx] - mean) * std_inv;
+    }
+}

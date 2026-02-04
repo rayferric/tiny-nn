@@ -1,0 +1,29 @@
+#version 450
+
+layout(binding = 0) readonly buffer OutGradBuf { float data[]; } buf_OutGrad;
+layout(binding = 1) buffer InGradBuf { float data[]; } buf_InGrad;
+layout(binding = 2) readonly buffer RunningVarBuf { float data[]; } buf_RunningVar;
+
+layout(push_constant) uniform PushConstants {
+    uint NHW;
+    uint C;
+} u_PC;
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+void main() {
+    uint c = gl_WorkGroupID.x;
+    uint thread_idx = gl_LocalInvocationID.x;
+    uint num_threads = gl_WorkGroupSize.x;
+    
+    if (c >= u_PC.C) {
+        return;
+    }
+    
+    float var = buf_RunningVar.data[c];
+    float std_inv = 1.0 / sqrt(var + 1e-5);
+    
+    for (uint idx = c + thread_idx * u_PC.C; idx < u_PC.NHW * u_PC.C; idx += num_threads * u_PC.C) {
+        buf_InGrad.data[idx] += buf_OutGrad.data[idx] * std_inv;
+    }
+}

@@ -1,0 +1,36 @@
+#version 450
+
+layout(binding = 0) readonly buffer InputBuf { float data[]; } buf_In;
+layout(binding = 1) buffer OutputBuf { float data[]; } buf_Out;
+
+layout(push_constant) uniform PushConstants {
+    uint outer;
+    uint reduced;
+    uint inner;
+    uint accum;
+    float scale;
+} u_PC;
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+void main() {
+    uint global_idx = gl_GlobalInvocationID.x;
+    uint total_elements = u_PC.outer * u_PC.reduced * u_PC.inner;
+    if (global_idx >= total_elements) return;
+
+    uint i_inner = global_idx % u_PC.inner;
+    uint i_reduced = (global_idx / u_PC.inner) % u_PC.reduced;
+    uint i_outer = (global_idx / (u_PC.inner * u_PC.reduced)) % u_PC.outer;
+    
+    // broadcast: [outer, inner] -> [outer, reduced, inner]
+    
+    // read from input [outer, inner]
+    uint input_idx = i_outer * u_PC.inner + i_inner;
+    float value = buf_In.data[input_idx] * u_PC.scale;
+    
+    if (u_PC.accum != 0) {
+        buf_Out.data[global_idx] += value;
+    } else {
+        buf_Out.data[global_idx] = value;
+    }
+}

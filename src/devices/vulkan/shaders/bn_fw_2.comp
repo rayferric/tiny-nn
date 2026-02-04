@@ -1,0 +1,46 @@
+#version 450
+
+// bn_fw 2nd pass: calc variance 
+
+layout(binding = 0) readonly buffer InputBuf { float data[]; } buf_Input;
+layout(binding = 1) readonly buffer MeanBuf { float data[]; } buf_Mean;
+layout(binding = 2) writeonly buffer VarBuf { float data[]; } buf_Var;
+
+layout(push_constant) uniform PushConstants {
+    uint NHW;
+    uint C;
+} u_PC;
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+shared float shared_sum[256];
+
+void main() {
+    uint c = gl_WorkGroupID.x;
+    uint thread_idx = gl_LocalInvocationID.x;
+    uint num_threads = gl_WorkGroupSize.x;
+    
+    if (c >= u_PC.C) {
+        return;
+    }
+    
+    float mean = buf_Mean.data[c];
+
+    float local_sum = 0.0;
+    for (uint idx = c + thread_idx * u_PC.C; idx < u_PC.NHW * u_PC.C; idx += num_threads * u_PC.C) {
+        float diff = buf_Input.data[idx] - mean;
+        local_sum += diff * diff;
+    }
+    shared_sum[thread_idx] = local_sum;
+    barrier();
+    for (uint stride = num_threads / 2; stride > 0; stride /= 2) {
+        if (thread_idx < stride) {
+            shared_sum[thread_idx] += shared_sum[thread_idx + stride];
+        }
+        barrier();
+    }
+    
+    if (thread_idx == 0) {
+        buf_Var.data[c] = shared_sum[0] / float(u_PC.NHW);
+    }
+}

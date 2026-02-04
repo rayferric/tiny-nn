@@ -65,7 +65,7 @@ tnn_tensor_t *_tnn_detach(tnn_tensor_t *t, const char *new_device) {
 	);
 
 	if (new_device != NULL) {
-		tnn_device_t *dev = find_device(new_device);
+		tnn_device_t *dev = tnn_find_device(new_device);
 		ensure_tensor_on_device(detached, dev);
 	}
 
@@ -209,4 +209,17 @@ float tnn_item(tnn_tensor_t *t) {
 	float value;
 	t->dev->_backend.buf_copy_to_host(t->dev, &value, t->data, sizeof(float));
 	return value;
+}
+
+void tnn_memcpy_data(tnn_tensor_t *t, float *out) {
+	t->dev->_backend.buf_copy_to_host(
+	    t->dev, out, t->data, tnn_size(t) * sizeof(float)
+	);
+}
+
+void tnn_memcpy_grad(tnn_tensor_t *t, float *out) {
+	assert(t->grad != NULL && "tnn_memcpy_grad: tensor has no grad");
+	t->dev->_backend.buf_copy_to_host(
+	    t->dev, out, t->grad, tnn_size(t) * sizeof(float)
+	);
 }

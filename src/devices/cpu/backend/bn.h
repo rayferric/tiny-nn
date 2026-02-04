@@ -15,10 +15,9 @@ static void bn_fw(
     void *output,
     void *running_mean,
     void *running_var,
-    void *tmp_batch_mean,
     void *batch_var,
-    size_t nhw,
-    size_t c,
+    size_t NHW,
+    size_t C,
     float momentum,
     bool test
 ) {
@@ -26,47 +25,42 @@ static void bn_fw(
 	float *out_f = (float *)output;
 	float *run_mean_f = (float *)running_mean;
 	float *run_var_f = (float *)running_var;
-	float *batch_mean_f = (float *)tmp_batch_mean;
 	float *batch_var_f = (float *)batch_var;
 
-	size_t total = nhw * c;
+	size_t NHWC = NHW * C;
 
-	for (size_t channel = 0; channel < c; channel++) {
+	for (size_t c = 0; c < C; c++) {
 		float mean, var;
-
 		if (test) {
-			// use running statistics
-			mean = run_mean_f[channel];
-			var = run_var_f[channel];
+			mean = run_mean_f[c];
+			var = run_var_f[c];
 		} else {
-			// compute batch statistics
+			// compute mean for this channel
 			float sum = 0.0f;
-			for (size_t idx = channel; idx < total; idx += c) {
+			for (size_t idx = c; idx < NHWC; idx += C) {
 				sum += in_f[idx];
 			}
-			mean = sum / nhw;
+			mean = sum / NHW;
 
+			// compute variance
 			float var_sum = 0.0f;
-			for (size_t idx = channel; idx < total; idx += c) {
+			for (size_t idx = c; idx < NHWC; idx += C) {
 				float diff = in_f[idx] - mean;
 				var_sum += diff * diff;
 			}
-			var = var_sum / nhw;
+			var = var_sum / NHW;
 
-			// update running statistics with EMA
-			run_mean_f[channel] =
-			    momentum * run_mean_f[channel] + (1.0f - momentum) * mean;
-			run_var_f[channel] =
-			    momentum * run_var_f[channel] + (1.0f - momentum) * var;
+			// update running stats
+			run_mean_f[c] = momentum * run_mean_f[c] + (1.0f - momentum) * mean;
+			run_var_f[c] = momentum * run_var_f[c] + (1.0f - momentum) * var;
 
-			// save batch statistics for backward
-			batch_mean_f[channel] = mean;
-			batch_var_f[channel] = var;
+			// pass immediate stats to backward for use in train mode
+			batch_var_f[c] = var;
 		}
 
 		// normalize
-		float std_inv = 1.0f / sqrtf(var + 1e-5f);
-		for (size_t idx = channel; idx < total; idx += c) {
+		float std_inv = 1 / sqrtf(var + 1e-5);
+		for (size_t idx = c; idx < NHWC; idx += C) {
 			out_f[idx] = (in_f[idx] - mean) * std_inv;
 		}
 	}
@@ -74,65 +68,47 @@ static void bn_fw(
 
 static void bn_bw(
     tnn_device_t *dev,
-    const void *out_grad,      // [NHW, C]
-    const void *out_data,      // [NHW, C]
-    void *in_grad,             // [NHW, C]
-    const void *running_var,   // [C]
-    const void *batch_var,     // [C]
-    void *tmp_grad_sum,        // [C]
-    void *tmp_grad_x_norm_sum, // [C]
-    size_t nhw,
-    size_t c,
+    const void *out_grad,    // [NHW, C]
+    const void *out_data,    // [NHW, C]
+    void *in_grad,           // [NHW, C]
+    const void *running_var, // [C]
+    const void *batch_var,   // [C]
+    size_t NHW,
+    size_t C,
     bool test
 ) {
 	const float *out_grad_f = (const float *)out_grad;
-	const float *in_norm_f = (const float *)out_data;
+	const float *out_data_f = (const float *)out_data;
 	float *in_grad_f = (float *)in_grad;
 	const float *run_var_f = (const float *)running_var;
 	const float *batch_var_f = (const float *)batch_var;
-	float *tmp_grad_sum_f = (float *)tmp_grad_sum;
-	float *tmp_grad_x_norm_sum_f = (float *)tmp_grad_x_norm_sum;
 
-	size_t total = nhw * c;
+	size_t NHWC = NHW * C;
 
-	if (test) {
-		// simple case: just scale by 1/std
-		for (size_t channel = 0; channel < c; channel++) {
-			float var = run_var_f[channel];
-			float std_inv = 1.0f / sqrtf(var + 1e-5f);
+	for (size_t c = 0; c < C; c++) {
+		if (test) {
+			float var = run_var_f[c];
+			float std_inv = 1.0f / sqrtf(var + 1e-5);
 
-			for (size_t idx = channel; idx < total; idx += c) {
+			for (size_t idx = c; idx < NHWC; idx += C) {
 				in_grad_f[idx] += out_grad_f[idx] * std_inv;
 			}
-		}
-	} else {
-		// compute tmp sums first
-		for (size_t channel = 0; channel < c; channel++) {
+		} else {
+			float var = batch_var_f[c];
+			float std_inv = 1.0f / sqrtf(var + 1e-5f);
+
 			float sum_grad = 0.0f;
 			float sum_grad_x_norm = 0.0f;
-
-			for (size_t idx = channel; idx < total; idx += c) {
+			for (size_t idx = c; idx < NHWC; idx += C) {
 				sum_grad += out_grad_f[idx];
-				sum_grad_x_norm += out_grad_f[idx] * in_norm_f[idx];
+				sum_grad_x_norm += out_grad_f[idx] * out_data_f[idx];
 			}
 
-			tmp_grad_sum_f[channel] = sum_grad;
-			tmp_grad_x_norm_sum_f[channel] = sum_grad_x_norm;
-		}
-
-		// apply gradient formula
-		for (size_t channel = 0; channel < c; channel++) {
-			float var = batch_var_f[channel];
-			float std_inv = 1.0f / sqrtf(var + 1e-5f);
-			float k = std_inv / nhw;
-
-			float sum_grad = tmp_grad_sum_f[channel];
-			float sum_grad_x_norm = tmp_grad_x_norm_sum_f[channel];
-
-			for (size_t idx = channel; idx < total; idx += c) {
+			float k = std_inv / NHW;
+			for (size_t idx = c; idx < NHWC; idx += C) {
 				in_grad_f[idx] +=
 				    out_grad_f[idx] * std_inv -
-				    (sum_grad + in_norm_f[idx] * sum_grad_x_norm) * k;
+				    (sum_grad + out_data_f[idx] * sum_grad_x_norm) * k;
 			}
 		}
 	}

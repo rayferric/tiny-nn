@@ -12,4 +12,4 @@ extern device_globals_t device_globals;
 int devices_init();
 void devices_terminate();
 
-tnn_device_t *find_device(const char *name);
+tnn_device_t *tnn_find_device(const char *name);

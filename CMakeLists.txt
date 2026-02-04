@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 project(tnn LANGUAGES C)
 
+option(ENABLE_AVX2 "Enable AVX2 optimizations in CPU backend" ON)
 option(ENABLE_VULKAN_BACKEND "Enable Vulkan backend support" ON)
 option(ENABLE_VULKAN_VALIDATION "Enable Vulkan validation layers" ON)
 option(BUILD_EXAMPLES "Build example executables" ON)
@@ -14,13 +15,18 @@ list(FILTER TARGET_SOURCES EXCLUDE REGEX ".*/src/backend/.*")
 add_library(tnn ${TARGET_SOURCES})
 target_include_directories(tnn
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include"
-    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src"
 )
 target_link_libraries(tnn PRIVATE m)
 
 # re-add cpu backend files
 file(GLOB_RECURSE CPU_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/cpu/*")
 target_sources(tnn PRIVATE ${CPU_SOURCES})
+
+if(ENABLE_AVX2)
+    message(STATUS "AVX2 enabled for CPU backend")
+    target_compile_definitions(tnn PRIVATE ENABLE_AVX2)
+    target_compile_options(tnn PRIVATE -mavx2 -mfma)
+endif()
 
 if(ENABLE_VULKAN_BACKEND)
     message(STATUS "Vulkan backend enabled")
@@ -44,7 +50,7 @@ if(ENABLE_VULKAN_BACKEND)
 
     find_program(GLSLANG glslangValidator REQUIRED)
     find_program(XXD xxd REQUIRED)
-    file(GLOB SHADER_SOURCES "${CMAKE_SOURCE_DIR}/src/devices/vulkan/shaders/*.comp")
+    file(GLOB SHADER_SOURCES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/src/devices/vulkan/shaders/*.comp")
 
     set(GENERATED_HEADERS_DIR "${CMAKE_BINARY_DIR}/generated/vulkan_shaders")
     file(MAKE_DIRECTORY ${GENERATED_HEADERS_DIR})
@@ -82,6 +88,6 @@ if(BUILD_EXAMPLES)
     add_executable(tnn_example_cifar10_resnet_train example/cifar10_resnet/train.c)
     target_link_libraries(tnn_example_cifar10_resnet_train PRIVATE tnn)
 
-    add_executable(tnn_example_vulkan example/vulkan/main.c)
-    target_link_libraries(tnn_example_vulkan PRIVATE tnn)
+    add_executable(tnn_example_vulkan_backend_tests example/vulkan_backend_tests/main.c)
+    target_link_libraries(tnn_example_vulkan_backend_tests PRIVATE tnn)
 endif()

@@ -7,13 +7,21 @@ layout(binding = 2) buffer OutputBuf { float data[]; } buf_Out;
 layout(push_constant) uniform PushConstants {
     uint outer;
     uint inner;
+    uint grid_size; // ceil(sqrt(outer * inner))
 } u_PC;
 
 layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
 void main() {
-    uint i_outer = gl_GlobalInvocationID.x;
-    uint i_inner = gl_GlobalInvocationID.y;
+    // flatten the 2D global invocation to 1D
+    uint flat_idx = gl_GlobalInvocationID.y * u_PC.grid_size * 16 + gl_GlobalInvocationID.x;
+    
+    // recover original indices
+    uint i_outer = flat_idx / u_PC.inner;
+    uint i_inner = flat_idx % u_PC.inner;
+    
     if (i_outer >= u_PC.outer || i_inner >= u_PC.inner) return;
-    buf_Out.data[i_outer * u_PC.inner + i_inner] = buf_A.data[i_outer * u_PC.inner + i_inner] + buf_B.data[i_inner];
+    
+    buf_Out.data[i_outer * u_PC.inner + i_inner] = 
+        buf_A.data[i_outer * u_PC.inner + i_inner] + buf_B.data[i_inner];
 }

@@ -12,8 +12,14 @@ int main() {
 		return 1;
 	}
 
-	tnn_set_default_device("vulkan");
-	printf("Current device: %s\n", tnn_get_default_device());
+	tnn_device_t *devs[TNN_MAX_NUM_DEVICES];
+	size_t num_devs = tnn_list_devices(devs);
+	for (int i = 0; i < num_devs; i++) {
+		printf("- %s - %s\n", devs[i]->name, devs[i]->desc);
+	}
+
+	tnn_set_default_device(tnn_find_device("vulkan"));
+	printf("Current device: %s\n", tnn_get_default_device()->name);
 
 	mnist_t mnist;
 	mnist_create(&mnist);
@@ -45,8 +51,8 @@ int main() {
 			printf("\nStep %d/%zu: ", i + 1, num_steps);
 			printf("loss=");
 			tnn_print(loss);
-			// float acc = accuracy(y_pred, y);
-			// printf(", accuracy=%.2f%%", acc * 100.0f);
+			float acc = accuracy(y_pred, y);
+			printf(", accuracy=%.2f%%", acc * 100.0f);
 			fflush(stdout);
 
 			tnn_free(loss);

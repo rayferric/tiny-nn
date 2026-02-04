@@ -24,15 +24,24 @@ typedef union {
 		vk_kernel_t matmul;
 		vk_kernel_t add;
 		vk_kernel_t accum;
-		vk_kernel_t sum;
+		vk_kernel_t sum_reduce;
+		vk_kernel_t sum_broadcast;
 		vk_kernel_t relu_fw;
 		vk_kernel_t relu_bw;
 		vk_kernel_t ce_fw_1;
 		vk_kernel_t ce_fw_2;
 		vk_kernel_t ce_bw;
+		vk_kernel_t conv_fw;
+		vk_kernel_t conv_bw_input;
+		vk_kernel_t conv_bw_weight;
 		vk_kernel_t adamw;
+		vk_kernel_t bn_fw_1;
+		vk_kernel_t bn_fw_2;
+		vk_kernel_t bn_fw_3;
+		vk_kernel_t bn_bw_train;
+		vk_kernel_t bn_bw_test;
 	};
-	vk_kernel_t array[10];
+	vk_kernel_t array[19];
 } vk_device_context_kernels_t;
 
 typedef struct {
@@ -413,13 +422,22 @@ static void sync_device(tnn_device_t *dev) {
 	_end_submit_current_buffer(dev, true);
 
 	vk_device_context_t *ctx = (vk_device_context_t *)dev->_ctx;
-	vkQueueWaitIdle(ctx->compute_queue);
+	VkResult res = vkQueueWaitIdle(ctx->compute_queue);
+	if (res != VK_SUCCESS) {
+		error_exit(dev, "failed to wait for queue idle");
+	}
 
 	// reset command pool to free all command buffers
-	vkResetCommandPool(ctx->device, ctx->command_pool, 0);
+	res = vkResetCommandPool(ctx->device, ctx->command_pool, 0);
+	if (res != VK_SUCCESS) {
+		error_exit(dev, "failed to reset command pool");
+	}
 
 	// reset descriptor pool
-	vkResetDescriptorPool(ctx->device, ctx->descriptor_pool, 0);
+	res = vkResetDescriptorPool(ctx->device, ctx->descriptor_pool, 0);
+	if (res != VK_SUCCESS) {
+		error_exit(dev, "failed to reset descriptor pool");
+	}
 
 	// reset for next ops
 	ctx->cmd_bufs_curr_idx = 0;

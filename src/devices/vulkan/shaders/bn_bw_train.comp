@@ -1,0 +1,55 @@
+#version 450
+
+layout(binding = 0) readonly buffer OutGradBuf { float data[]; } buf_OutGrad;
+layout(binding = 1) readonly buffer OutDataBuf { float data[]; } buf_OutData;
+layout(binding = 2) buffer InGradBuf { float data[]; } buf_InGrad;
+layout(binding = 3) readonly buffer BatchVarBuf { float data[]; } buf_BatchVar;
+
+layout(push_constant) uniform PushConstants {
+    uint NHW;
+    uint C;
+} u_PC;
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+shared float shared_sum_grad[256];
+shared float shared_sum_grad_x_norm[256];
+
+void main() {
+    uint c = gl_WorkGroupID.x;
+    uint thread_idx = gl_LocalInvocationID.x;
+    uint num_threads = gl_WorkGroupSize.x;
+    
+    if (c >= u_PC.C) {
+        return;
+    }
+    
+    float var = buf_BatchVar.data[c];
+    float std_inv = 1.0 / sqrt(var + 1e-5);
+
+    float local_sum_grad = 0.0;
+    float local_sum_grad_x_norm = 0.0;
+    for (uint idx = c + thread_idx * u_PC.C; idx < u_PC.NHW * u_PC.C; idx += num_threads * u_PC.C) {
+        local_sum_grad += buf_OutGrad.data[idx];
+        local_sum_grad_x_norm += buf_OutGrad.data[idx] * buf_OutData.data[idx];
+    }
+    shared_sum_grad[thread_idx] = local_sum_grad;
+    shared_sum_grad_x_norm[thread_idx] = local_sum_grad_x_norm;
+    barrier();
+    for (uint stride = num_threads / 2; stride > 0; stride /= 2) {
+        if (thread_idx < stride) {
+            shared_sum_grad[thread_idx] += shared_sum_grad[thread_idx + stride];
+            shared_sum_grad_x_norm[thread_idx] += shared_sum_grad_x_norm[thread_idx + stride];
+        }
+        barrier();
+    }
+    float sum_grad = shared_sum_grad[0];
+    float sum_grad_x_norm = shared_sum_grad_x_norm[0];
+
+    float k = std_inv / float(u_PC.NHW);
+    for (uint idx = c + thread_idx * u_PC.C; idx < u_PC.NHW * u_PC.C; idx += num_threads * u_PC.C) {
+        buf_InGrad.data[idx] += 
+            buf_OutGrad.data[idx] * std_inv -
+            (sum_grad + buf_OutData.data[idx] * sum_grad_x_norm) * k;
+    }
+}

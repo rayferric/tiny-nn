@@ -28,7 +28,7 @@ static void bias_backward(tnn_tensor_t *self) {
 
 	// bias->grad += sum(self->grad over batch dimension)
 	if (bias->requires_grad) {
-		self->dev->_backend.sum(
+		self->dev->_backend.sum_reduce(
 		    self->dev,
 		    self->grad,
 		    bias->grad,
@@ -36,8 +36,7 @@ static void bias_backward(tnn_tensor_t *self) {
 		    dim_batch,
 		    dim_feat,
 		    1.0f,
-		    true,
-		    false
+		    true
 		);
 	}
 }

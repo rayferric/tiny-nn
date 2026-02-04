@@ -35,6 +35,13 @@ buf_copy_to_host(tnn_device_t *dev, void *dst, const void *src, size_t bytes) {
 	memcpy(dst, src, bytes);
 }
 
+static void buf_fill_f(tnn_device_t *dev, void *dst, float value, size_t n) {
+	float *dst_f = (float *)dst;
+	for (size_t i = 0; i < n; i++) {
+		dst_f[i] = value;
+	}
+}
+
 #include "./matmul.h"
 
 // out[outer, inner] = a[outer, inner] + b[inner]
@@ -69,43 +76,57 @@ static void accum(tnn_device_t *dev, const void *in, void *out, size_t n) {
 
 // out[outer, inner] = sum(in[outer, reduced, inner], axis=1)
 // if accum, add to out, else overwrite
-// if reverse, broadcast instead of reducing:
-//   out[outer, reduced, inner] = in[outer, inner]
-static void
-sum(tnn_device_t *dev,
+static void sum_reduce(
+    tnn_device_t *dev,
     const void *in,
     void *out,
     size_t outer,
     size_t reduced,
     size_t inner,
     float scale,
-    bool accum,
-    bool reverse) {
+    bool accum
+) {
 	const float *in_f = (const float *)in;
 	float *out_f = (float *)out;
 
 	for (size_t i_outer = 0; i_outer < outer; i_outer++) {
 		for (size_t i_inner = 0; i_inner < inner; i_inner++) {
-			if (!reverse) {
-				float sum = 0.0f;
-				for (size_t i_red = 0; i_red < reduced; i_red++) {
-					sum += in_f[(i_outer * reduced + i_red) * inner + i_inner];
-				}
-				if (accum) {
-					out_f[i_outer * inner + i_inner] += sum * scale;
-				} else {
-					out_f[i_outer * inner + i_inner] = sum * scale;
-				}
+			float sum = 0.0f;
+			for (size_t i_red = 0; i_red < reduced; i_red++) {
+				sum += in_f[(i_outer * reduced + i_red) * inner + i_inner];
+			}
+			if (accum) {
+				out_f[i_outer * inner + i_inner] += sum * scale;
 			} else {
-				float val = in_f[i_outer * inner + i_inner] * scale;
-				for (size_t i_red = 0; i_red < reduced; i_red++) {
-					if (accum) {
-						out_f[(i_outer * reduced + i_red) * inner + i_inner] +=
-						    val;
-					} else {
-						out_f[(i_outer * reduced + i_red) * inner + i_inner] =
-						    val;
-					}
+				out_f[i_outer * inner + i_inner] = sum * scale;
+			}
+		}
+	}
+}
+
+// broadcast instead of reducing:
+//   out[outer, reduced, inner] = in[outer, inner]
+static void sum_broadcast(
+    tnn_device_t *dev,
+    const void *in,
+    void *out,
+    size_t outer,
+    size_t reduced,
+    size_t inner,
+    float scale,
+    bool accum
+) {
+	const float *in_f = (const float *)in;
+	float *out_f = (float *)out;
+
+	for (size_t i_outer = 0; i_outer < outer; i_outer++) {
+		for (size_t i_inner = 0; i_inner < inner; i_inner++) {
+			float val = in_f[i_outer * inner + i_inner] * scale;
+			for (size_t i_red = 0; i_red < reduced; i_red++) {
+				if (accum) {
+					out_f[(i_outer * reduced + i_red) * inner + i_inner] += val;
+				} else {
+					out_f[(i_outer * reduced + i_red) * inner + i_inner] = val;
 				}
 			}
 		}
@@ -183,10 +204,12 @@ static _tnn_backend_t backend = {
     .buf_copy = buf_copy,
     .buf_copy_to_host = buf_copy_to_host,
     .buf_copy_to_device = buf_copy_to_device,
+    .buf_fill_f = buf_fill_f,
     .matmul = matmul,
     .add = add,
     .accum = accum,
-    .sum = sum,
+    .sum_reduce = sum_reduce,
+    .sum_broadcast = sum_broadcast,
     .relu_fw = relu_fw,
     .relu_bw = relu_bw,
     .ce_fw = ce_fw,

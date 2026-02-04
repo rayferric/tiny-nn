@@ -28,7 +28,7 @@ static void mean_backward(tnn_tensor_t *self) {
 	mean_context_t *ctx = (mean_context_t *)self->_ctx;
 
 	// broadcast gradient from output to input
-	input->dev->_backend.sum(
+	input->dev->_backend.sum_broadcast(
 	    input->dev,
 	    self->grad,
 	    input->grad,
@@ -37,7 +37,6 @@ static void mean_backward(tnn_tensor_t *self) {
 	    ctx->inner_size,
 	    // gradient coefficient - each input element contributed 1/n to the mean
 	    1.0f / (float)ctx->num_averaged,
-	    false,
 	    true
 	);
 }
@@ -79,7 +78,7 @@ tnn_tensor_t *_tnn_mean(tnn_tensor_t *input, size_t i_dim, size_t num_dims) {
 	}
 
 	// compute the mean
-	input->dev->_backend.sum(
+	input->dev->_backend.sum_reduce(
 	    input->dev,
 	    input->data,
 	    output->data,
@@ -87,7 +86,6 @@ tnn_tensor_t *_tnn_mean(tnn_tensor_t *input, size_t i_dim, size_t num_dims) {
 	    num_averaged,
 	    inner_size,
 	    1.0f / (float)num_averaged,
-	    false,
 	    false
 	);
 

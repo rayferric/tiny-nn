@@ -1,0 +1,55 @@
+#version 450
+
+layout(binding = 0) readonly buffer InputBuf { float data[]; } buf_Input;
+layout(binding = 1) readonly buffer WeightBuf { float data[]; } buf_Weight;
+layout(binding = 2) buffer OutputBuf { float data[]; } buf_Output;
+
+layout(push_constant) uniform PushConstants {
+    uint batch;
+    uint h_in; uint w_in; uint c_in;
+    uint h_out; uint w_out; uint c_out;
+    uint kernel_size; uint stride; uint padding;
+} u_PC;
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+void main() {
+    // parallelize over output index: [batch, h_out, w_out, c_out]
+    uint out_idx = gl_GlobalInvocationID.x;
+    uint total_outputs = u_PC.batch * u_PC.h_out * u_PC.w_out * u_PC.c_out;
+    if (out_idx >= total_outputs) {
+        return;
+    }
+    
+    // decompose flattened index
+    uint co = out_idx % u_PC.c_out;
+    uint wo = (out_idx / u_PC.c_out) % u_PC.w_out;
+    uint ho = (out_idx / (u_PC.c_out * u_PC.w_out)) % u_PC.h_out;
+    uint b = out_idx / (u_PC.c_out * u_PC.w_out * u_PC.h_out);
+    
+    float sum = 0.0;
+    
+    // convolve over kernel
+    for (uint ki = 0; ki < u_PC.kernel_size; ki++) {
+        for (uint kj = 0; kj < u_PC.kernel_size; kj++) {
+            int hi = int(ho * u_PC.stride + ki) - int(u_PC.padding);
+            int wi = int(wo * u_PC.stride + kj) - int(u_PC.padding);
+            
+            // bounds check
+            if (hi >= 0 && hi < int(u_PC.h_in) && wi >= 0 && wi < int(u_PC.w_in)) {
+                // accumulate over input channels
+                for (uint ci = 0; ci < u_PC.c_in; ci++) {
+                    // input indexing: [batch, h_in, w_in, c_in]
+                    uint in_idx = ((b * u_PC.h_in + uint(hi)) * u_PC.w_in + uint(wi)) * u_PC.c_in + ci;
+                    
+                    // weight indexing: [c_out, k, k, c_in]
+                    uint w_idx = ((co * u_PC.kernel_size + ki) * u_PC.kernel_size + kj) * u_PC.c_in + ci;
+                    
+                    sum += buf_Input.data[in_idx] * buf_Weight.data[w_idx];
+                }
+            }
+        }
+    }
+    
+    buf_Output.data[out_idx] = sum;
+}

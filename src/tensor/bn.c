@@ -38,10 +38,6 @@ static void bn_backward(tnn_tensor_t *self) {
 	size_t C = ctx->C;
 	size_t NHWC = NHW * C;
 
-	void *tmp_grad_sum =
-	    self->dev->_backend.buf_alloc(self->dev, C * sizeof(float));
-	void *tmp_grad_x_norm_sum =
-	    self->dev->_backend.buf_alloc(self->dev, C * sizeof(float));
 	self->dev->_backend.bn_bw(
 	    self->dev,
 	    self->grad,
@@ -49,14 +45,10 @@ static void bn_backward(tnn_tensor_t *self) {
 	    input->grad,
 	    ctx->running_var,
 	    ctx->batch_var,
-	    tmp_grad_sum,
-	    tmp_grad_x_norm_sum,
 	    NHW,
 	    C,
 	    ctx->test
 	);
-	self->dev->_backend.buf_free(self->dev, tmp_grad_sum);
-	self->dev->_backend.buf_free(self->dev, tmp_grad_x_norm_sum);
 }
 
 tnn_tensor_t *tnn_bn(tnn_tensor_t *input, float momentum, bool test) {
@@ -109,22 +101,18 @@ tnn_tensor_t *tnn_bn(tnn_tensor_t *input, float momentum, bool test) {
 	ctx->dev = input->dev;
 
 	// forward pass
-	void *tmp_batch_mean =
-	    input->dev->_backend.buf_alloc(input->dev, C * sizeof(float));
 	input->dev->_backend.bn_fw(
 	    input->dev,
 	    input->data,
 	    output->data,
 	    running_mean->data,
 	    running_var->data,
-	    tmp_batch_mean,
 	    ctx->batch_var,
 	    NHW,
 	    C,
 	    momentum,
 	    test
 	);
-	input->dev->_backend.buf_free(input->dev, tmp_batch_mean);
 
 	output->requires_grad = input->requires_grad;
 	output->parents[0] = input;

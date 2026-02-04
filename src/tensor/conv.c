@@ -7,6 +7,7 @@
 #include <stdio.h>
 
 #include "../util/safe_malloc.h"
+#include "./impl.h"
 
 typedef struct {
 	size_t dim_out;
@@ -111,8 +112,9 @@ tnn_tensor_t *_tnn_conv(
 	// weight dims: [out_channels, kernel_size, kernel_size, in_channels]
 	size_t weight_dims[4] = {dim_out, kernel_size, kernel_size, dim_in};
 	bool weight_created = false;
-	tnn_tensor_t *weight =
-	    tnn_alloc_or_get_state(weight_dims, 4, "conv", &weight_created);
+	tnn_tensor_t *weight = alloc_or_get_state_tensor_on_device(
+	    weight_dims, 4, input->dev, "conv", &weight_created
+	);
 	weight->requires_grad = true;
 	if (weight_created) {
 		tnn_init_xavier(
@@ -132,7 +134,8 @@ tnn_tensor_t *_tnn_conv(
 	output_dims[input->num_dims - 2] = w_out;
 	output_dims[input->num_dims - 1] = dim_out;
 
-	tnn_tensor_t *output = tnn_alloc(output_dims, input->num_dims);
+	tnn_tensor_t *output =
+	    alloc_tensor_on_device(output_dims, input->num_dims, input->dev);
 	input->dev->_backend.conv_fw(
 	    input->dev,
 	    input->data,

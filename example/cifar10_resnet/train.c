@@ -12,6 +12,9 @@ int main() {
 		return 1;
 	}
 
+	tnn_set_default_device(tnn_find_device("vulkan"));
+	printf("Current device: %s\n", tnn_get_default_device()->name);
+
 	cifar10_t cifar;
 	cifar10_create(&cifar);
 	for (int i = 1; i <= 5; i++) {
@@ -34,21 +37,19 @@ int main() {
 			tnn_tensor_t *x, *y;
 			cifar10_make_batch(&cifar, i * batch_size, batch_size, &x, &y);
 
-			tnn_tensor_t *y_pred = resnet(x, CIFAR10_NUM_LABELS, 8, 1, 1);
+			tnn_tensor_t *y_pred = resnet(x, CIFAR10_NUM_LABELS, 16, 4, 3);
 			tnn_tensor_t *loss = tnn_ce(y_pred, y);
 
 			tnn_zero_grad();
 			tnn_backward(loss);
 			tnn_adamw();
 
-			if (i % 10 == 0) {
-				printf("\nStep %d/%zu: ", i + 1, num_steps);
-				printf("loss=");
-				tnn_print(loss);
-				float acc = accuracy(y_pred, y);
-				printf(", accuracy=%.2f%%", acc * 100.0f);
-				fflush(stdout);
-			}
+			printf("\nStep %d/%zu: ", i + 1, num_steps);
+			printf("loss=");
+			tnn_print(loss);
+			float acc = accuracy(y_pred, y);
+			printf(", accuracy=%.2f%%", acc * 100.0f);
+			fflush(stdout);
 
 			tnn_free(loss);
 		}

@@ -1,0 +1,49 @@
+#version 450
+
+layout(binding = 0) readonly buffer InputBuf { float data[]; } buf_Input;
+layout(binding = 1) readonly buffer OutGradBuf { float data[]; } buf_OutGrad;
+layout(binding = 2) buffer WeightGradBuf { float data[]; } buf_WeightGrad;
+
+layout(push_constant) uniform PushConstants {
+    uint batch;
+    uint h_in; uint w_in; uint c_in;
+    uint h_out; uint w_out; uint c_out;
+    uint kernel_size; uint stride; uint padding;
+} u_PC;
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+void main() {
+    // parallelize over weight index: [c_out, kernel_size, kernel_size, c_in]
+    uint global_idx = gl_GlobalInvocationID.x;
+    uint total_size = u_PC.kernel_size * u_PC.kernel_size * u_PC.c_in * u_PC.c_out;
+    if (global_idx >= total_size) return;
+
+    uint ci = global_idx % u_PC.c_in;
+    uint kj = (global_idx / u_PC.c_in) % u_PC.kernel_size;
+    uint ki = (global_idx / (u_PC.c_in * u_PC.kernel_size)) % u_PC.kernel_size;
+    uint co = (global_idx / (u_PC.c_in * u_PC.kernel_size * u_PC.kernel_size));
+
+    float dw_sum = 0.0;
+
+    for (uint b = 0; b < u_PC.batch; b++) {
+        for (uint ho = 0; ho < u_PC.h_out; ho++) {
+            for (uint wo = 0; wo < u_PC.w_out; wo++) {
+                int hi = int(ho * u_PC.stride + ki) - int(u_PC.padding);
+                int wi = int(wo * u_PC.stride + kj) - int(u_PC.padding);
+
+                if (hi >= 0 && hi < int(u_PC.h_in) && wi >= 0 && wi < int(u_PC.w_in)) {
+                    uint in_idx = ((b * u_PC.h_in + uint(hi)) * u_PC.w_in + uint(wi)) * u_PC.c_in + ci;
+                    float input_val = buf_Input.data[in_idx];
+
+                    uint out_grad_idx = ((b * u_PC.h_out + ho) * u_PC.w_out + wo) * u_PC.c_out + co;
+                    float out_grad_val = buf_OutGrad.data[out_grad_idx];
+
+                    dw_sum += input_val * out_grad_val;
+                }
+            }
+        }
+    }
+
+    buf_WeightGrad.data[global_idx] += dw_sum;
+}

@@ -40,9 +40,10 @@ struct tnn_device {
 
 size_t tnn_list_devices(tnn_device_t **out_devs);
 tnn_device_t *tnn_get_cpu();
+tnn_device_t *tnn_find_device(const char *name);
 
-void tnn_set_default_device(const char *name);
-const char *tnn_get_default_device();
+void tnn_set_default_device(tnn_device_t *dev);
+tnn_device_t *tnn_get_default_device();
 
 ///
 // TENSOR STRUCTURE AND UTILS
@@ -110,6 +111,8 @@ size_t tnn_index_at(tnn_tensor_t *t, size_t *indices, size_t num_indices);
 
 void tnn_print(tnn_tensor_t *t);
 float tnn_item(tnn_tensor_t *t);
+void tnn_memcpy_data(tnn_tensor_t *t, float *out);
+void tnn_memcpy_grad(tnn_tensor_t *t, float *out);
 
 tnn_tensor_t *tnn_proj(tnn_tensor_t *input, size_t dim_out);
 tnn_tensor_t *tnn_bias(tnn_tensor_t *input);

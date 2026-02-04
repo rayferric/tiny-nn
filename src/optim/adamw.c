@@ -7,7 +7,7 @@
 #include <string.h>
 
 #include "../tensor/impl.h" // for alloc func
-#include "./util/key_str_utils.h"
+#include "../util/key_str_utils.h"
 
 void _tnn_adamw(tnn_adamw_cfg_t cfg) {
 	char full_scope[STATE_DICT_KEY_MAX_LEN];

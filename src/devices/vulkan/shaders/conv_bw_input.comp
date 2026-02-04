@@ -1,0 +1,61 @@
+#version 450
+
+layout(binding = 0) readonly buffer OutGradBuf { float data[]; } buf_OutGrad;
+layout(binding = 1) readonly buffer WeightBuf { float data[]; } buf_Weight;
+layout(binding = 2) buffer InGradBuf { float data[]; } buf_InGrad;
+
+layout(push_constant) uniform PushConstants {
+    uint batch;
+    uint h_in; uint w_in; uint c_in;
+    uint h_out; uint w_out; uint c_out;
+    uint kernel_size; uint stride; uint padding;
+} u_PC;
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+void main() {
+    // parallelize over input gradient: [batch, h_in, w_in, c_in]
+    uint global_idx = gl_GlobalInvocationID.x;
+    uint total_inputs = u_PC.batch * u_PC.h_in * u_PC.w_in * u_PC.c_in;
+    if (global_idx >= total_inputs) {
+        return;
+    }
+    
+    // decompose index
+    uint ci = global_idx % u_PC.c_in;
+    uint wi = (global_idx / u_PC.c_in) % u_PC.w_in;
+    uint hi = (global_idx / (u_PC.c_in * u_PC.w_in)) % u_PC.h_in;
+    uint b = global_idx / (u_PC.c_in * u_PC.w_in * u_PC.h_in);
+    
+    float grad_sum = 0.0;
+
+    // iterate over kernel positions
+    for (uint ki = 0; ki < u_PC.kernel_size; ki++) {
+        for (uint kj = 0; kj < u_PC.kernel_size; kj++) {
+            // calculate which output position would have used this input pixel
+            int ho_numerator = int(hi) - int(ki) + int(u_PC.padding);
+            int wo_numerator = int(wi) - int(kj) + int(u_PC.padding);
+            
+            // check if divisible by stride
+            if (ho_numerator % int(u_PC.stride) != 0) continue;
+            if (wo_numerator % int(u_PC.stride) != 0) continue;
+            
+            int ho = ho_numerator / int(u_PC.stride);
+            int wo = wo_numerator / int(u_PC.stride);
+            
+            // check bounds
+            if (ho < 0 || ho >= int(u_PC.h_out)) continue;
+            if (wo < 0 || wo >= int(u_PC.w_out)) continue;
+            
+            // accumulate from all output channels
+            for (uint co = 0; co < u_PC.c_out; co++) {
+                uint out_idx = ((b * u_PC.h_out + uint(ho)) * u_PC.w_out + uint(wo)) * u_PC.c_out + co;
+                uint w_idx = ((co * u_PC.kernel_size + ki) * u_PC.kernel_size + kj) * u_PC.c_in + ci;
+                
+                grad_sum += buf_OutGrad.data[out_idx] * buf_Weight.data[w_idx];
+            }
+        }
+    }
+    
+    buf_InGrad.data[global_idx] += grad_sum;
+}

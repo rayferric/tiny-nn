@@ -12,15 +12,13 @@ typedef struct {
 	void *(*buf_alloc)(tnn_device_t *dev, size_t sz);
 	void (*buf_free)(tnn_device_t *dev, void *ptr);
 	void (*buf_copy)(tnn_device_t *dev, void *dst, const void *src, size_t sz);
-
-	// memory transfer (NULL for devices that use system memory)
-
 	void (*buf_copy_to_host)(
 	    tnn_device_t *dev, void *dst, const void *src, size_t sz
 	);
 	void (*buf_copy_to_device)(
 	    tnn_device_t *dev, void *dst, const void *src, size_t sz
 	);
+	void (*buf_fill_f)(tnn_device_t *dev, void *dst, float value, size_t n);
 
 	// blas/nn
 
@@ -54,8 +52,7 @@ typedef struct {
 	// in must have outer * reduced * inner elements
 	// out must have outer * inner elements
 	// accum=true adds to existing out values
-	// reverse=true broadcasts the middle dimension instead of reducing
-	void (*sum)(
+	void (*sum_reduce)(
 	    tnn_device_t *dev,
 	    const void *in,
 	    void *out,
@@ -63,8 +60,17 @@ typedef struct {
 	    size_t reduced,
 	    size_t inner,
 	    float scale,
-	    bool accum,
-	    bool reverse
+	    bool accum
+	);
+	void (*sum_broadcast)(
+	    tnn_device_t *dev,
+	    const void *in,
+	    void *out,
+	    size_t outer,
+	    size_t reduced,
+	    size_t inner,
+	    float scale,
+	    bool accum
 	);
 
 	void (*relu_fw)(tnn_device_t *dev, const void *in, void *out, size_t n);
@@ -163,7 +169,6 @@ typedef struct {
 	    void *output,
 	    void *running_mean,
 	    void *running_var,
-	    void *tmp_batch_mean,
 	    void *batch_var, // only written if !test
 	    size_t nhw,
 	    size_t c,
@@ -178,13 +183,11 @@ typedef struct {
 	// running_var: [C] (only used if test)
 	void (*bn_bw)(
 	    tnn_device_t *dev,
-	    const void *out_grad,      // [NHW, C]
-	    const void *out_data,      // [NHW, C]
-	    void *in_grad,             // [NHW, C]
-	    const void *running_var,   // [C]
-	    const void *batch_var,     // [C]
-	    void *tmp_grad_sum,        // [C]
-	    void *tmp_grad_x_norm_sum, // [C]
+	    const void *out_grad,    // [NHW, C]
+	    const void *out_data,    // [NHW, C]
+	    void *in_grad,           // [NHW, C]
+	    const void *running_var, // [C]
+	    const void *batch_var,   // [C]
 	    size_t nhw,
 	    size_t c,
 	    bool test

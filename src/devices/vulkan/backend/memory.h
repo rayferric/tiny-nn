@@ -106,46 +106,52 @@ static void create_staging_buf(
 
 static void
 record_transfer_barriers(VkCommandBuffer cmd, VkBuffer src, VkBuffer dst) {
-	VkBufferMemoryBarrier barriers[2] = {
-	    [0] =
-	        {
-	            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
-	            .pNext = NULL,
-	            .srcAccessMask =
-	                VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
-	            .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT,
-	            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-	            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-	            .buffer = src, // the VkBuffer handle
-	            .offset = 0,
-	            .size = VK_WHOLE_SIZE // or specific byte range if you want
-	        },
-	    [1] = {
-	        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
-	        .pNext = NULL,
-	        .srcAccessMask =
-	            VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT |
-	            VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT,
-	        .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-	        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-	        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-	        .buffer = dst,
-	        .offset = 0,
-	        .size = VK_WHOLE_SIZE
-	    }
-	};
-	vkCmdPipelineBarrier(
-	    cmd,
-	    VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-	    VK_PIPELINE_STAGE_TRANSFER_BIT,
-	    0,
-	    0,
-	    NULL,
-	    sizeof(barriers) / sizeof(barriers[0]),
-	    barriers,
-	    0,
-	    NULL
-	);
+	VkBufferMemoryBarrier barriers[2];
+	uint32_t barrier_count = 0;
+
+	if (src != VK_NULL_HANDLE) {
+		barriers[barrier_count++] = (VkBufferMemoryBarrier){
+		    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+		    .pNext = NULL,
+		    .srcAccessMask =
+		        VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
+		    .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT,
+		    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+		    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+		    .buffer = src,
+		    .offset = 0,
+		    .size = VK_WHOLE_SIZE
+		};
+	}
+	if (dst != VK_NULL_HANDLE) {
+		barriers[barrier_count++] = (VkBufferMemoryBarrier){
+		    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+		    .pNext = NULL,
+		    .srcAccessMask =
+		        VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT |
+		        VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT,
+		    .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+		    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+		    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+		    .buffer = dst,
+		    .offset = 0,
+		    .size = VK_WHOLE_SIZE
+		};
+	}
+	if (barrier_count > 0) {
+		vkCmdPipelineBarrier(
+		    cmd,
+		    VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+		    VK_PIPELINE_STAGE_TRANSFER_BIT,
+		    0,
+		    0,
+		    NULL,
+		    barrier_count,
+		    barriers,
+		    0,
+		    NULL
+		);
+	}
 }
 
 static void *buf_alloc(tnn_device_t *dev, size_t bytes) {
@@ -296,8 +302,7 @@ buf_copy_to_device(tnn_device_t *dev, void *dst, const void *src, size_t sz) {
 
 	// copy from staging buffer to device buffer
 	VkCommandBuffer cmd = ensure_ready_for_recording(dev);
-	// the barrier on staging buffer is unnecessary but should not hurt
-	record_transfer_barriers(cmd, staging_buffer, dst_buf->buffer);
+	record_transfer_barriers(cmd, VK_NULL_HANDLE, dst_buf->buffer);
 	VkBufferCopy copy_region = {
 	    .srcOffset = 0,
 	    .dstOffset = 0,
@@ -313,4 +318,16 @@ buf_copy_to_device(tnn_device_t *dev, void *dst, const void *src, size_t sz) {
 	vkFreeMemory(ctx->device, staging_memory, NULL);
 
 	// TODO: this destruction should be queued until next sync instead
+}
+
+static void buf_fill_f(tnn_device_t *dev, void *dst, float value, size_t n) {
+	vk_device_context_t *ctx = (vk_device_context_t *)dev->_ctx;
+	vk_buffer_t *vk_buf = (vk_buffer_t *)dst;
+
+	VkCommandBuffer cmd = ensure_ready_for_recording(dev);
+	record_transfer_barriers(cmd, VK_NULL_HANDLE, vk_buf->buffer);
+
+	vkCmdFillBuffer(
+	    cmd, vk_buf->buffer, 0, n * sizeof(float), *((uint32_t *)&value)
+	);
 }
