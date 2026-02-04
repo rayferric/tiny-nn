@@ -12,9 +12,6 @@ int main() {
 		return 1;
 	}
 
-	tnn_set_default_device(tnn_find_device("vulkan"));
-	printf("Current device: %s\n", tnn_get_default_device()->name);
-
 	cifar10_t cifar;
 	cifar10_create(&cifar);
 	for (int i = 1; i <= 5; i++) {
@@ -26,13 +23,18 @@ int main() {
 			return 1;
 		}
 	}
-	printf("cifar loaded\n");
-	fflush(stdout);
+	printf("Loaded CIFAR-10\n");
+
+	tnn_set_default_device(tnn_find_device("vulkan"));
+	printf("Current device: %s\n", tnn_get_default_device()->name);
 
 	const size_t num_epochs = 1;
 	const size_t batch_size = 100;
 	const size_t num_steps = cifar.num_imgs / batch_size;
 	for (int i_epoch = 0; i_epoch < num_epochs; i_epoch++) {
+		float total_loss = 0.0f;
+		float total_acc = 0.0f;
+		float total_samples = 0.0f;
 		for (int i = 0; i < num_steps; i++) {
 			TNN_TRACY_ZONE_START("step");
 			tnn_tensor_t *x, *y;
@@ -45,12 +47,22 @@ int main() {
 			tnn_backward(loss);
 			tnn_adamw();
 
-			printf("\nStep %d/%zu: ", i + 1, num_steps);
-			printf("loss=");
-			tnn_print(loss);
-			float acc = accuracy(y_pred, y);
-			printf(", accuracy=%.2f%%", acc * 100.0f);
-			fflush(stdout);
+			total_loss += tnn_item(loss);
+			total_acc += accuracy(y_pred, y);
+			total_samples++;
+
+			if (i % 10 == 0) {
+				printf("\nStep %d/%zu: ", i + 1, num_steps);
+				printf("loss=%.4f", total_loss / total_samples);
+				printf(
+				    ", accuracy=%.2f%%", (total_acc / total_samples) * 100.0f
+				);
+				fflush(stdout);
+
+				total_loss = 0.0f;
+				total_acc = 0.0f;
+				total_samples = 0.0f;
+			}
 
 			tnn_free(loss);
 			TNN_TRACY_ZONE_END();

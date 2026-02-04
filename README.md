@@ -1,16 +1,22 @@
 **Tiny NN is a deep learning framework written from scratch in C.**
 
+- Supported architectures: **MLP, CNN (ResNet)**
+- **AVX2** CPU optimizations
+- Alternative **Vulkan** backend
+- **Tracy** profiler instrumentation
+- Elegant **PyTorch**-like API
+
 > [!NOTE]
 > Currently a work in progress. Future features are planned, including:
 >
-> - More tensor operations
-> - Advanced model examples
-> - CPU backend optimizations
-> - Alternative Vulkan compute backend
+> - Further CPU and Vulkan backend optimizations, necessary for CNNs
+> - Advanced model examples (RNN, Transformers)
 
-### MNIST classifier example in action
+### Classifier examples in action
 
-![](docs/01-mnist-mlp-showcase.png)
+|         MNIST Digits (MLP)          |            CIFAR-10 (ResNet)             |
+| :---------------------------------: | :--------------------------------------: |
+| ![](docs/01-mnist-mlp-showcase.png) | ![](docs/02-cifar10-resnet-showcase.png) |
 
 ### API example
 
@@ -49,6 +55,10 @@ int main() {
     if (tnn_init()) {
         return 1;
     }
+
+    // Enable GPU acceleration with a single line of code:
+    tnn_set_default_device(tnn_find_device("vulkan"));
+
     // Load existing model or checkpoint:
     // tnn_load("mnist.tnn");
 
@@ -69,6 +79,9 @@ int main() {
 
         // Remember to free the computation graph!
         tnn_free(loss);
+
+        // Optionally mark frames for Tracy profiler:
+        TNN_TRACY_FRAME_END();
     }
 
     // Strip optimizer if not checkpointing:
@@ -79,3 +92,9 @@ int main() {
     return 0;
 }
 ```
+
+### Tracy Profiler Integration Showcase
+
+|     Tracy Profiler (ResNet Training)     |
+| :--------------------------------------: |
+| ![](docs/03-tracy-profiler-showcase.png) |

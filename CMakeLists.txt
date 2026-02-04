@@ -5,8 +5,9 @@ option(ENABLE_AVX2 "Enable AVX2 optimizations in CPU backend" ON)
 option(ENABLE_VULKAN_BACKEND "Enable Vulkan backend support" ON)
 option(ENABLE_VULKAN_VALIDATION "Enable Vulkan validation layers" OFF)
 option(BUILD_EXAMPLES "Build example executables" ON)
-option(ENABLE_TRACY "Enable Tracy profiler" ON)
+option(ENABLE_TRACY "Enable Tracy profiler instrumentation" ON)
 set(TRACY_VERSION "v0.13.1" CACHE STRING "Tracy profiler version/tag to checkout")
+
 file(GLOB_RECURSE TARGET_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/include/*.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c"
