@@ -35,6 +35,8 @@ static void matmul(
     bool tpose_b,
     bool accum
 ) {
+	TNN_TRACY_ZONE_START();
+
 	// Cast input pointers to float pointers
 	const float *a_f = (const float *)a;
 	const float *b_f = (const float *)b;
@@ -103,4 +105,6 @@ static void matmul(
 			}
 		}
 	}
+
+	TNN_TRACY_ZONE_END();
 }

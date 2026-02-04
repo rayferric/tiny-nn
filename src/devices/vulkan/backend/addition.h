@@ -1,5 +1,6 @@
 #pragma once
 
+#include "tnn/tnn.h"
 #include <math.h>
 
 #include "../impl.h"
@@ -16,6 +17,8 @@ add(tnn_device_t *dev,
     void *out,
     size_t outer,
     size_t inner) {
+	TNN_TRACY_ZONE_START();
+
 	vk_device_context_t *ctx = (vk_device_context_t *)dev->_ctx;
 
 	uint32_t grid_size = ceil(sqrt(outer * inner)) + 0.5f;
@@ -47,9 +50,13 @@ add(tnn_device_t *dev,
 	    1,
 	    cmd
 	);
+
+	TNN_TRACY_ZONE_END();
 }
 
 static void accum(tnn_device_t *dev, const void *in, void *out, size_t n) {
+	TNN_TRACY_ZONE_START();
+
 	vk_device_context_t *ctx = (vk_device_context_t *)dev->_ctx;
 	VkCommandBuffer cmd = ensure_ready_for_recording(dev);
 	vk_buffer_t *bufs[2] = {(vk_buffer_t *)in, (vk_buffer_t *)out};
@@ -72,6 +79,8 @@ static void accum(tnn_device_t *dev, const void *in, void *out, size_t n) {
 	    1,
 	    cmd
 	);
+
+	TNN_TRACY_ZONE_END();
 }
 
 static void sum_reduce(
@@ -84,6 +93,8 @@ static void sum_reduce(
     float scale,
     bool accum
 ) {
+	TNN_TRACY_ZONE_START();
+
 	vk_device_context_t *ctx = (vk_device_context_t *)dev->_ctx;
 	VkCommandBuffer cmd = ensure_ready_for_recording(dev);
 	vk_buffer_t *bufs[2] = {(vk_buffer_t *)in, (vk_buffer_t *)out};
@@ -114,6 +125,8 @@ static void sum_reduce(
 	    1,
 	    cmd
 	);
+
+	TNN_TRACY_ZONE_END();
 }
 
 static void sum_broadcast(
@@ -126,6 +139,8 @@ static void sum_broadcast(
     float scale,
     bool accum
 ) {
+	TNN_TRACY_ZONE_START();
+
 	vk_device_context_t *ctx = (vk_device_context_t *)dev->_ctx;
 	VkCommandBuffer cmd = ensure_ready_for_recording(dev);
 	vk_buffer_t *bufs[2] = {(vk_buffer_t *)in, (vk_buffer_t *)out};
@@ -156,4 +171,6 @@ static void sum_broadcast(
 	    1,
 	    cmd
 	);
+
+	TNN_TRACY_ZONE_END();
 }

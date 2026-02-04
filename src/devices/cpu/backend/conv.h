@@ -28,6 +28,8 @@ static void conv_fw(
     size_t stride,
     size_t padding
 ) {
+	TNN_TRACY_ZONE_START();
+
 	const float *in_f = (const float *)input;
 	const float *w_f = (const float *)weight;
 	float *out_f = (float *)output;
@@ -83,6 +85,8 @@ static void conv_fw(
 	}
 	}
 	// clang-format on
+
+	TNN_TRACY_ZONE_END();
 }
 
 // out_grad: [batch, h_out, w_out, c_out]
@@ -104,6 +108,8 @@ static void conv_bw_input(
     size_t stride,
     size_t padding
 ) {
+	TNN_TRACY_ZONE_START();
+
 	const float *out_grad_f = (const float *)out_grad;
 	const float *w_f = (const float *)weight;
 	float *in_grad_f = (float *)in_grad;
@@ -149,6 +155,8 @@ static void conv_bw_input(
 	}
 	}
 	// clang-format on
+
+	TNN_TRACY_ZONE_END();
 }
 
 static void conv_bw_weight(
@@ -167,6 +175,8 @@ static void conv_bw_weight(
     size_t stride,
     size_t padding
 ) {
+	TNN_TRACY_ZONE_START();
+
 	const float *in_f = (const float *)input;
 	const float *out_grad_f = (const float *)out_grad;
 	float *w_grad_f = (float *)weight_grad;
@@ -212,4 +222,6 @@ static void conv_bw_weight(
 	}
 	}
 	// clang-format on
+
+	TNN_TRACY_ZONE_END();
 }

@@ -39,6 +39,8 @@ static inline tnn_tensor_t *resnet(
     size_t num_layers,
     size_t num_blocks_per_layer
 ) {
+	TNN_TRACY_ZONE_START();
+
 	TNN_SCOPE("resnet") {
 		TNN_SCOPE("init") {
 			x = tnn_relu(tnn_bn(tnn_conv(x, base_dim, 3, 1, 1)));
@@ -54,5 +56,6 @@ static inline tnn_tensor_t *resnet(
 			x = tnn_proj(x, num_cls);
 		}
 	}
+	TNN_TRACY_ZONE_END();
 	return x;
 }

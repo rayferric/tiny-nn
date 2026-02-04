@@ -36,6 +36,8 @@ void tnn_free(tnn_tensor_t *t) {
 		return;
 	}
 
+	TNN_TRACY_ZONE_START();
+
 	// decrement ref counts for parents and free them recursively
 	for (size_t i = 0; i < t->num_parents; i++) {
 		tnn_tensor_t *parent = t->parents[i];
@@ -55,6 +57,8 @@ void tnn_free(tnn_tensor_t *t) {
 		t->_free_ctx(t->_ctx);
 	}
 	free(t);
+
+	TNN_TRACY_ZONE_END();
 }
 
 tnn_tensor_t *_tnn_detach(tnn_tensor_t *t, const char *new_device) {
@@ -154,6 +158,8 @@ size_t tnn_index_at(tnn_tensor_t *t, size_t *indices, size_t num_indices) {
 }
 
 void tnn_print(tnn_tensor_t *t) {
+	TNN_TRACY_ZONE_START();
+
 	assert(t->num_dims <= 2 && "tnn_print: only 0D/1D/2D supported");
 
 	float *data_ptr = NULL;
@@ -203,6 +209,8 @@ void tnn_print(tnn_tensor_t *t) {
 	if (tmp_data) {
 		free(tmp_data);
 	}
+
+	TNN_TRACY_ZONE_END();
 }
 
 float tnn_item(tnn_tensor_t *t) {
@@ -212,14 +220,18 @@ float tnn_item(tnn_tensor_t *t) {
 }
 
 void tnn_memcpy_data(tnn_tensor_t *t, float *out) {
+	TNN_TRACY_ZONE_START();
 	t->dev->_backend.buf_copy_to_host(
 	    t->dev, out, t->data, tnn_size(t) * sizeof(float)
 	);
+	TNN_TRACY_ZONE_END();
 }
 
 void tnn_memcpy_grad(tnn_tensor_t *t, float *out) {
+	TNN_TRACY_ZONE_START();
 	assert(t->grad != NULL && "tnn_memcpy_grad: tensor has no grad");
 	t->dev->_backend.buf_copy_to_host(
 	    t->dev, out, t->grad, tnn_size(t) * sizeof(float)
 	);
+	TNN_TRACY_ZONE_END();
 }

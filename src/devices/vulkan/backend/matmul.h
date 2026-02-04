@@ -16,6 +16,8 @@ static void matmul(
     bool tpose_b,
     bool accum
 ) {
+	TNN_TRACY_ZONE_START();
+
 	vk_device_context_t *ctx = (vk_device_context_t *)dev->_ctx;
 
 	vk_buffer_t *bufs[3] = {
@@ -53,4 +55,6 @@ static void matmul(
 	    // ^ matching local work group size in the shader
 	    cmd
 	);
+
+	TNN_TRACY_ZONE_END();
 }

@@ -25,6 +25,8 @@ static void conv_fw(
     size_t stride,
     size_t padding
 ) {
+	TNN_TRACY_ZONE_START();
+
 	vk_device_context_t *ctx = (vk_device_context_t *)dev->_ctx;
 	VkCommandBuffer cmd = ensure_ready_for_recording(dev);
 	vk_buffer_t *bufs[3] = {
@@ -67,6 +69,8 @@ static void conv_fw(
 	    1,
 	    cmd
 	);
+
+	TNN_TRACY_ZONE_END();
 }
 
 // out_grad: [batch, h_out, w_out, c_out]
@@ -88,6 +92,8 @@ static void conv_bw_input(
     size_t stride,
     size_t padding
 ) {
+	TNN_TRACY_ZONE_START();
+
 	vk_device_context_t *ctx = (vk_device_context_t *)dev->_ctx;
 	VkCommandBuffer cmd = ensure_ready_for_recording(dev);
 	vk_buffer_t *bufs[3] = {
@@ -130,6 +136,8 @@ static void conv_bw_input(
 	    1,
 	    cmd
 	);
+
+	TNN_TRACY_ZONE_END();
 }
 
 // input: [batch, h_in, w_in, c_in]
@@ -151,6 +159,8 @@ static void conv_bw_weight(
     size_t stride,
     size_t padding
 ) {
+	TNN_TRACY_ZONE_START();
+
 	vk_device_context_t *ctx = (vk_device_context_t *)dev->_ctx;
 	VkCommandBuffer cmd = ensure_ready_for_recording(dev);
 	vk_buffer_t *bufs[3] = {
@@ -195,4 +205,6 @@ static void conv_bw_weight(
 	    1,
 	    cmd
 	);
+
+	TNN_TRACY_ZONE_END();
 }

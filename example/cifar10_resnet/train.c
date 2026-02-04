@@ -34,6 +34,7 @@ int main() {
 	const size_t num_steps = cifar.num_imgs / batch_size;
 	for (int i_epoch = 0; i_epoch < num_epochs; i_epoch++) {
 		for (int i = 0; i < num_steps; i++) {
+			TNN_TRACY_ZONE_START("step");
 			tnn_tensor_t *x, *y;
 			cifar10_make_batch(&cifar, i * batch_size, batch_size, &x, &y);
 
@@ -52,6 +53,8 @@ int main() {
 			fflush(stdout);
 
 			tnn_free(loss);
+			TNN_TRACY_ZONE_END();
+			TNN_TRACY_FRAME_END();
 		}
 	}
 

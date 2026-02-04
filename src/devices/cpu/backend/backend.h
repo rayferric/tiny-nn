@@ -7,16 +7,20 @@
 #include <tnn/tnn.h>
 
 static void *buf_alloc(tnn_device_t *dev, size_t bytes) {
+	TNN_TRACY_ZONE_START();
 	void *ptr = malloc(bytes);
 	if (!ptr) {
 		fprintf(stderr, "cpu_alloc: out of memory\n");
 		exit(1);
 	}
+	TNN_TRACY_ZONE_END();
 	return ptr;
 }
 
 static void buf_free(tnn_device_t *dev, void *ptr) {
+	TNN_TRACY_ZONE_START();
 	free(ptr);
+	TNN_TRACY_ZONE_END();
 }
 
 static void
@@ -52,6 +56,7 @@ add(tnn_device_t *dev,
     void *out,
     size_t outer,
     size_t inner) {
+	TNN_TRACY_ZONE_START();
 	const float *a_f = (const float *)a;
 	const float *b_f = (const float *)b;
 	float *out_f = (float *)out;
@@ -62,16 +67,19 @@ add(tnn_device_t *dev,
 			    a_f[i_outer * inner + i_inner] + b_f[i_inner];
 		}
 	}
+	TNN_TRACY_ZONE_END();
 }
 
 // out[i] += in[i]
 static void accum(tnn_device_t *dev, const void *in, void *out, size_t n) {
+	TNN_TRACY_ZONE_START();
 	const float *in_f = (const float *)in;
 	float *out_f = (float *)out;
 
 	for (size_t i = 0; i < n; i++) {
 		out_f[i] += in_f[i];
 	}
+	TNN_TRACY_ZONE_END();
 }
 
 // out[outer, inner] = sum(in[outer, reduced, inner], axis=1)
@@ -86,6 +94,7 @@ static void sum_reduce(
     float scale,
     bool accum
 ) {
+	TNN_TRACY_ZONE_START();
 	const float *in_f = (const float *)in;
 	float *out_f = (float *)out;
 
@@ -102,6 +111,7 @@ static void sum_reduce(
 			}
 		}
 	}
+	TNN_TRACY_ZONE_END();
 }
 
 // broadcast instead of reducing:
@@ -116,6 +126,7 @@ static void sum_broadcast(
     float scale,
     bool accum
 ) {
+	TNN_TRACY_ZONE_START();
 	const float *in_f = (const float *)in;
 	float *out_f = (float *)out;
 
@@ -131,14 +142,17 @@ static void sum_broadcast(
 			}
 		}
 	}
+	TNN_TRACY_ZONE_END();
 }
 
 static void relu_fw(tnn_device_t *dev, const void *in, void *out, size_t n) {
+	TNN_TRACY_ZONE_START();
 	const float *in_f = (const float *)in;
 	float *out_f = (float *)out;
 	for (size_t i = 0; i < n; i++) {
 		out_f[i] = in_f[i] > 0.0f ? in_f[i] : 0.0f;
 	}
+	TNN_TRACY_ZONE_END();
 }
 
 static void relu_bw(
@@ -148,6 +162,7 @@ static void relu_bw(
     void *in_grad,
     size_t n
 ) {
+	TNN_TRACY_ZONE_START();
 	const float *out_data_f = (const float *)out_data;
 	const float *out_grad_f = (const float *)out_grad;
 	float *in_grad_f = (float *)in_grad;
@@ -156,6 +171,7 @@ static void relu_bw(
 			in_grad_f[i] += out_grad_f[i];
 		}
 	}
+	TNN_TRACY_ZONE_END();
 }
 
 #include "./bn.h"
@@ -176,6 +192,8 @@ static void adamw(
     float eps,
     float wd
 ) {
+	TNN_TRACY_ZONE_START();
+
 	// pre-compute bias correction factors
 	float bias1 = 1.0f - powf(b1, t);
 	float bias2 = 1.0f - powf(b2, t);
@@ -196,6 +214,7 @@ static void adamw(
 		((float *)param_data)[j] -=
 		    lr * (m_hat / (sqrtf(v_hat) + eps) + wd * ((float *)param_data)[j]);
 	}
+	TNN_TRACY_ZONE_END();
 }
 
 static _tnn_backend_t backend = {

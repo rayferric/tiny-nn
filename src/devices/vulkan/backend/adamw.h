@@ -18,6 +18,8 @@ static void adamw(
     float eps,
     float wd
 ) {
+	TNN_TRACY_ZONE_START();
+
 	vk_device_context_t *ctx = (vk_device_context_t *)dev->_ctx;
 
 	vk_buffer_t *bufs[4] = {
@@ -60,4 +62,6 @@ static void adamw(
 	    1,
 	    cmd
 	);
+
+	TNN_TRACY_ZONE_END();
 }

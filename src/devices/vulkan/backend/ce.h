@@ -16,6 +16,8 @@ static void ce_fw(
     size_t n,
     size_t c
 ) {
+	TNN_TRACY_ZONE_START();
+
 	vk_device_context_t *ctx = (vk_device_context_t *)dev->_ctx;
 
 	VkCommandBuffer cmd = ensure_ready_for_recording(dev);
@@ -77,6 +79,8 @@ static void ce_fw(
 	}
 
 	buf_free(dev, per_batch_loss_tmp);
+
+	TNN_TRACY_ZONE_END();
 }
 
 static void ce_bw(

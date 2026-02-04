@@ -21,6 +21,8 @@ static void bn_fw(
     float momentum,
     bool test
 ) {
+	TNN_TRACY_ZONE_START();
+
 	const float *in_f = (const float *)input;
 	float *out_f = (float *)output;
 	float *run_mean_f = (float *)running_mean;
@@ -64,6 +66,8 @@ static void bn_fw(
 			out_f[idx] = (in_f[idx] - mean) * std_inv;
 		}
 	}
+
+	TNN_TRACY_ZONE_END();
 }
 
 static void bn_bw(
@@ -77,6 +81,8 @@ static void bn_bw(
     size_t C,
     bool test
 ) {
+	TNN_TRACY_ZONE_START();
+
 	const float *out_grad_f = (const float *)out_grad;
 	const float *out_data_f = (const float *)out_data;
 	float *in_grad_f = (float *)in_grad;
@@ -112,6 +118,8 @@ static void bn_bw(
 			}
 		}
 	}
+
+	TNN_TRACY_ZONE_END();
 }
 
 // TEST-TIME BACKWARD PASS DERIVATION

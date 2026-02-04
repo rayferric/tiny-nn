@@ -7,6 +7,8 @@
 
 static void
 relu_fw(tnn_device_t *dev, const void *input, void *output, size_t size) {
+	TNN_TRACY_ZONE_START();
+
 	vk_device_context_t *ctx = (vk_device_context_t *)dev->_ctx;
 	VkCommandBuffer cmd = ensure_ready_for_recording(dev);
 	vk_buffer_t *bufs[2] = {(vk_buffer_t *)input, (vk_buffer_t *)output};
@@ -29,6 +31,8 @@ relu_fw(tnn_device_t *dev, const void *input, void *output, size_t size) {
 	    1,
 	    cmd
 	);
+
+	TNN_TRACY_ZONE_END();
 }
 
 static void relu_bw(
@@ -38,6 +42,8 @@ static void relu_bw(
     void *input_grad,
     size_t size
 ) {
+	TNN_TRACY_ZONE_START();
+
 	vk_device_context_t *ctx = (vk_device_context_t *)dev->_ctx;
 	VkCommandBuffer cmd = ensure_ready_for_recording(dev);
 	vk_buffer_t *bufs[3] = {
@@ -64,4 +70,6 @@ static void relu_bw(
 	    1,
 	    cmd
 	);
+
+	TNN_TRACY_ZONE_END();
 }

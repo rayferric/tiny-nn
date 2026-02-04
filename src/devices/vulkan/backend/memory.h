@@ -155,6 +155,8 @@ record_transfer_barriers(VkCommandBuffer cmd, VkBuffer src, VkBuffer dst) {
 }
 
 static void *buf_alloc(tnn_device_t *dev, size_t bytes) {
+	TNN_TRACY_ZONE_START();
+
 	ensure_device_initialized(dev);
 	vk_device_context_t *ctx = (vk_device_context_t *)dev->_ctx;
 
@@ -204,6 +206,8 @@ static void *buf_alloc(tnn_device_t *dev, size_t bytes) {
 	// bind memory to buffer
 	vkBindBufferMemory(ctx->device, vk_buf->buffer, vk_buf->memory, 0);
 
+	TNN_TRACY_ZONE_END();
+
 	return vk_buf;
 }
 
@@ -211,6 +215,8 @@ static void buf_free(tnn_device_t *dev, void *ptr) {
 	if (!ptr) {
 		return;
 	}
+
+	TNN_TRACY_ZONE_START();
 
 	vk_device_context_t *ctx = (vk_device_context_t *)dev->_ctx;
 	vk_buffer_t *vk_buf = (vk_buffer_t *)ptr;
@@ -220,6 +226,8 @@ static void buf_free(tnn_device_t *dev, void *ptr) {
 	vkDestroyBuffer(ctx->device, vk_buf->buffer, NULL);
 	vkFreeMemory(ctx->device, vk_buf->memory, NULL);
 	free(vk_buf);
+
+	TNN_TRACY_ZONE_END();
 }
 
 static void buf_copy(tnn_device_t *dev, void *dst, const void *src, size_t sz) {

@@ -25,6 +25,8 @@ static void bn_fw(
     float momentum,
     bool test
 ) {
+	TNN_TRACY_ZONE_START();
+
 	vk_device_context_t *ctx = (vk_device_context_t *)dev->_ctx;
 
 	VkCommandBuffer cmd = ensure_ready_for_recording(dev);
@@ -166,6 +168,8 @@ static void bn_fw(
 
 		buf_free(dev, batch_mean_tmp);
 	}
+
+	TNN_TRACY_ZONE_END();
 }
 
 static void bn_bw(
@@ -179,6 +183,8 @@ static void bn_bw(
     size_t C,
     bool test
 ) {
+	TNN_TRACY_ZONE_START();
+
 	vk_device_context_t *ctx = (vk_device_context_t *)dev->_ctx;
 
 	VkCommandBuffer cmd = ensure_ready_for_recording(dev);
@@ -241,4 +247,6 @@ static void bn_bw(
 		    cmd
 		);
 	}
+
+	TNN_TRACY_ZONE_END();
 }

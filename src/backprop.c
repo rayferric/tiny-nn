@@ -80,16 +80,8 @@ static tnn_tensor_t **_tnn_toposort(tnn_tensor_t *t, size_t *count) {
 	return result;
 }
 
-static void fill_grad(tnn_tensor_t *t, float value) {
-	size_t total_size = tnn_size(t);
-	float *tmp_buf = (float *)safe_malloc(total_size * sizeof(float));
-	for (size_t i = 0; i < total_size; i++) {
-		tmp_buf[i] = value;
-	}
-	t->dev->_backend.buf_copy_to_device(
-	    t->dev, t->grad, tmp_buf, total_size * sizeof(float)
-	);
-	free(tmp_buf);
+static inline void fill_grad(tnn_tensor_t *t, float value) {
+	t->dev->_backend.buf_fill_f(t->dev, t->grad, value, tnn_size(t));
 }
 
 void _tnn_zero_grad(const char *scope) {
@@ -112,6 +104,8 @@ void _tnn_zero_grad(const char *scope) {
 }
 
 void tnn_backward(tnn_tensor_t *loss) {
+	TNN_TRACY_ZONE_START();
+
 	assert(loss != NULL);
 	assert(tnn_size(loss) == 1 && "tnn_backward: loss must be scalar");
 
@@ -152,4 +146,5 @@ void tnn_backward(tnn_tensor_t *loss) {
 	}
 
 	free(nodes);
+	TNN_TRACY_ZONE_END();
 }

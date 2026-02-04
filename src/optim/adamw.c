@@ -10,6 +10,8 @@
 #include "../util/key_str_utils.h"
 
 void _tnn_adamw(tnn_adamw_cfg_t cfg) {
+	TNN_TRACY_ZONE_START();
+
 	char full_scope[STATE_DICT_KEY_MAX_LEN];
 	cat_keys(full_scope, global_state.active_scope, cfg.scope);
 
@@ -92,4 +94,6 @@ void _tnn_adamw(tnn_adamw_cfg_t cfg) {
 			entry = entry->next;
 		}
 	}
+
+	TNN_TRACY_ZONE_END();
 }

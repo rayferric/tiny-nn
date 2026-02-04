@@ -4,6 +4,10 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#ifdef ENABLE_TRACY
+#include <tracy/TracyC.h>
+#endif
+
 #include "./_optarg.h"
 
 #pragma clang diagnostic ignored "-Winitializer-overrides"
@@ -213,3 +217,21 @@ void _tnn_adamw(tnn_adamw_cfg_t cfg);
 #define tnn_adamw(...) OPTARG_FUNC(tnn_adamw, __VA_ARGS__)
 #define tnn_adamw_0() _tnn_adamw(TNN_ADAMW_CFG())
 #define tnn_adamw_1(cfg) _tnn_adamw(cfg)
+
+///
+// TRACY
+///
+
+#ifdef ENABLE_TRACY
+#define TNN_TRACY_FRAME_END() TracyCFrameMark
+#define TNN_TRACY_ZONE_START(...) OPTARG_FUNC(TNN_TRACY_ZONE_START, __VA_ARGS__)
+#define TNN_TRACY_ZONE_START_0() TracyCZone(_tnn_tracy_zone_ctx, 1)
+#define TNN_TRACY_ZONE_START_1(name) TracyCZoneN(_tnn_tracy_zone_ctx, name, 1)
+#define TNN_TRACY_ZONE_START_2(name, color)                                    \
+	TracyCZoneNC(_tnn_tracy_zone_ctx, name, color, 1)
+#define TNN_TRACY_ZONE_END() TracyCZoneEnd(_tnn_tracy_zone_ctx)
+#else
+#define TNN_TRACY_FRAME_END()
+#define TNN_TRACY_ZONE_START(...)
+#define TNN_TRACY_ZONE_END()
+#endif

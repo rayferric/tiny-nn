@@ -3,8 +3,10 @@ project(tnn LANGUAGES C)
 
 option(ENABLE_AVX2 "Enable AVX2 optimizations in CPU backend" ON)
 option(ENABLE_VULKAN_BACKEND "Enable Vulkan backend support" ON)
-option(ENABLE_VULKAN_VALIDATION "Enable Vulkan validation layers" ON)
+option(ENABLE_VULKAN_VALIDATION "Enable Vulkan validation layers" OFF)
 option(BUILD_EXAMPLES "Build example executables" ON)
+option(ENABLE_TRACY "Enable Tracy profiler" ON)
+set(TRACY_VERSION "v0.13.1" CACHE STRING "Tracy profiler version/tag to checkout")
 file(GLOB_RECURSE TARGET_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/include/*.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c"
@@ -90,4 +92,23 @@ if(BUILD_EXAMPLES)
 
     add_executable(tnn_example_vulkan_backend_tests example/vulkan_backend_tests/main.c)
     target_link_libraries(tnn_example_vulkan_backend_tests PRIVATE tnn)
+endif()
+
+if(ENABLE_TRACY)
+    message(STATUS "Tracy profiler enabled (version: ${TRACY_VERSION})")
+    target_compile_definitions(tnn PUBLIC ENABLE_TRACY)
+
+    enable_language(CXX)
+    include(FetchContent)
+    FetchContent_Declare(
+        tracy
+        GIT_REPOSITORY https://github.com/wolfpld/tracy.git
+        GIT_TAG ${TRACY_VERSION}
+        GIT_SHALLOW TRUE
+        GIT_PROGRESS TRUE
+    )
+    FetchContent_MakeAvailable(tracy)
+
+    target_compile_definitions(tnn PRIVATE TRACY_ENABLE)
+    target_link_libraries(tnn PUBLIC TracyClient)
 endif()
